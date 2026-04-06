@@ -1,0 +1,17 @@
+# buf.yaml  — place at repo root
+# https://buf.build/docs/configuration/v2/buf-yaml
+version: v2
+
+modules:
+  - path: api
+    # Pull in the google/api/*.proto Well-Known Types (annotations, http, etc.)
+    deps:
+      - buf.build/googleapis/googleapis
+
+lint:
+  use:
+    - DEFAULT
+
+breaking:
+  use:
+    - FILE

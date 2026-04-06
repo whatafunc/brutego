@@ -1,0 +1,132 @@
+syntax = "proto3";
+
+package antibruteforce.v1;
+
+option go_package = "github.com/yourorg/anti-bruteforce/pkg/api/antibruteforce/v1;antibruteforcepb";
+
+import "google/api/annotations.proto";
+import "google/protobuf/empty.proto";
+
+// =============================================================================
+// Anti-Bruteforce Service
+//
+// gRPC service definition. REST is exposed automatically via grpc-gateway
+// using the google.api.http annotations below. Every REST path in openapi.yaml
+// maps 1-to-1 to an RPC here.
+//
+// Code-generation commands (run from repo root):
+//   buf generate
+// or manually:
+//   protoc -I . -I third_party/googleapis \
+//     --go_out=. --go-grpc_out=. \
+//     --grpc-gateway_out=. \
+//     --openapiv2_out=. \
+//     api/antibruteforce/v1/antibruteforce.proto
+// =============================================================================
+
+service AntiBruteforceService {
+
+  // --------------------------------------------------------------------------
+  // Authorization
+  // --------------------------------------------------------------------------
+
+  // CheckAuth decides whether an authorization attempt should be allowed.
+  // Returns ok=true  → allow
+  //         ok=false → deny (rate limit exceeded or IP is blacklisted)
+  //         ok=true  → always allow when IP is whitelisted (short-circuits limits)
+  rpc CheckAuth(CheckAuthRequest) returns (CheckAuthResponse) {
+    option (google.api.http) = {
+      post: "/v1/auth/check"
+      body: "*"
+    };
+  }
+
+  // ResetBucket clears the leaky-bucket counters for a given login and IP.
+  // Useful for manual unblocking (typically called from the CLI tool).
+  rpc ResetBucket(ResetBucketRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      post: "/v1/bucket/reset"
+      body: "*"
+    };
+  }
+
+  // --------------------------------------------------------------------------
+  // Blacklist management
+  // --------------------------------------------------------------------------
+
+  // AddToBlacklist registers a CIDR subnet whose IPs will be unconditionally denied.
+  rpc AddToBlacklist(SubnetRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      post: "/v1/blacklist"
+      body: "*"
+    };
+  }
+
+  // RemoveFromBlacklist deregisters a previously added blacklist subnet.
+  rpc RemoveFromBlacklist(SubnetRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/v1/blacklist"
+      body: "*"
+    };
+  }
+
+  // --------------------------------------------------------------------------
+  // Whitelist management
+  // --------------------------------------------------------------------------
+
+  // AddToWhitelist registers a CIDR subnet whose IPs bypass all rate-limit checks.
+  rpc AddToWhitelist(SubnetRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      post: "/v1/whitelist"
+      body: "*"
+    };
+  }
+
+  // RemoveFromWhitelist deregisters a previously added whitelist subnet.
+  rpc RemoveFromWhitelist(SubnetRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/v1/whitelist"
+      body: "*"
+    };
+  }
+}
+
+// =============================================================================
+// Messages
+// =============================================================================
+
+// CheckAuthRequest carries the three dimensions used for rate limiting.
+message CheckAuthRequest {
+  // Username attempting to authenticate. Bucket key: login.
+  string login    = 1;
+
+  // Password submitted. Counted separately to defend against reverse brute-force
+  // (many logins, same password). Never persisted.
+  string password = 2;
+
+  // IPv4 address of the originating client. Bucket key: ip.
+  string ip       = 3;
+}
+
+// CheckAuthResponse is the single-field decision returned to the caller.
+message CheckAuthResponse {
+  // true  → the attempt is within limits, allow it.
+  // false → limit exceeded or IP blacklisted, deny it.
+  bool ok = 1;
+}
+
+// ResetBucketRequest identifies which buckets to clear.
+message ResetBucketRequest {
+  // Login whose per-login bucket should be reset.
+  string login = 1;
+
+  // IP whose per-IP bucket should be reset.
+  string ip    = 2;
+}
+
+// SubnetRequest carries an IPv4 CIDR subnet for whitelist/blacklist operations.
+message SubnetRequest {
+  // IPv4 subnet in CIDR notation, e.g. "192.168.10.0/24".
+  // Only IPv4 (/0 – /32) is supported.
+  string subnet = 1;
+}

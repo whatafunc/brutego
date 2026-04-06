@@ -1,0 +1,31 @@
+# buf.gen.yaml  — place at repo root
+# Run: buf generate
+version: v2
+
+plugins:
+  # 1. Go struct types
+  - remote: buf.build/protocolbuffers/go
+    out: pkg/api
+    opt:
+      - paths=source_relative
+
+  # 2. gRPC server/client stubs
+  - remote: buf.build/grpc/go
+    out: pkg/api
+    opt:
+      - paths=source_relative
+      - require_unimplemented_servers=true   # fail fast if you forget a method
+
+  # 3. grpc-gateway reverse-proxy (REST → gRPC)
+  - remote: buf.build/grpc-ecosystem/gateway
+    out: pkg/api
+    opt:
+      - paths=source_relative
+      - generate_unbound_methods=false
+
+  # 4. OpenAPI v2 spec (Swagger) — cross-check against our hand-written openapi.yaml
+  - remote: buf.build/grpc-ecosystem/openapiv2
+    out: api/openapiv2
+    opt:
+      - logtostderr=true
+      - allow_delete_body=true   # needed for DELETE /blacklist and /whitelist with body
