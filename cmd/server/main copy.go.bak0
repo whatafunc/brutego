@@ -1,0 +1,160 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"net"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"go.uber.org/zap"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+
+	"github.com/whatafunc/brutego/internal/config"
+	"github.com/whatafunc/brutego/internal/service"
+	"github.com/whatafunc/brutego/internal/storage"
+	pb "github.com/whatafunc/brutego/pkg/api/antibruteforce/v1"
+)
+
+func main() {
+	logger, err := zap.NewProduction()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to init logger: %v\n", err)
+		os.Exit(1)
+	}
+	defer logger.Sync() //nolint:errcheck
+
+	cfg, err := config.New()
+	if err != nil {
+		logger.Fatal("failed to load config", zap.Error(err))
+	}
+
+	store := storage.NewMemoryStorage()
+
+	svc := service.New(service.Deps{
+		Logger:  logger,
+		Storage: store,
+		Limits: service.Limits{
+			LoginRPM:    cfg.LoginRPM,
+			PasswordRPM: cfg.PasswordRPM,
+			IPRPM:       cfg.IPRPM,
+		},
+	})
+
+	ctx := context.Background()
+
+	grpcServer, grpcLis := setupGRPCServer(logger, svc, cfg.GRPCAddr)
+	gwMux := setupGateway(ctx, cfg.GRPCAddr, svc)
+	httpServer := setupHTTPServer(cfg.HTTPAddr, gwMux)
+
+	errCh := startServers(logger, grpcServer, grpcLis, httpServer, cfg)
+
+	gracefulShutdown(logger, grpcServer, httpServer, errCh)
+}
+
+// loggingInterceptor is a minimal unary gRPC interceptor for request logging.
+func loggingInterceptor(logger *zap.Logger) grpc.UnaryServerInterceptor {
+	return func(
+		ctx context.Context,
+		req interface{},
+		info *grpc.UnaryServerInfo,
+		handler grpc.UnaryHandler,
+	) (interface{}, error) {
+		start := time.Now()
+		resp, err := handler(ctx, req)
+		logger.Info("gRPC call",
+			zap.String("method", info.FullMethod),
+			zap.Duration("duration", time.Since(start)),
+			zap.Error(err),
+		)
+		return resp, err
+	}
+}
+
+func setupGRPCServer(logger *zap.Logger, svc pb.AntiBruteforceServiceServer, addr string) (*grpc.Server, net.Listener) {
+	grpcServer := grpc.NewServer(
+		grpc.ChainUnaryInterceptor(
+			loggingInterceptor(logger),
+		),
+	)
+	pb.RegisterAntiBruteforceServiceServer(grpcServer, svc)
+
+	grpcLis, err := net.Listen("tcp", addr)
+	if err != nil {
+		logger.Fatal("failed to listen gRPC", zap.String("addr", addr), zap.Error(err))
+	}
+
+	return grpcServer, grpcLis
+}
+
+func setupGateway(ctx context.Context, grpcAddr string, _ pb.AntiBruteforceServiceServer) *runtime.ServeMux {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	gwMux := runtime.NewServeMux()
+	dialOpts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
+
+	if err := pb.RegisterAntiBruteforceServiceHandlerFromEndpoint(ctx, gwMux, grpcAddr, dialOpts); err != nil {
+		zap.L().Fatal("failed to register gateway", zap.Error(err))
+	}
+
+	return gwMux
+}
+
+func setupHTTPServer(addr string, gwMux *runtime.ServeMux) *http.Server {
+	return &http.Server{
+		Addr:         addr,
+		Handler:      gwMux,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+}
+
+func startServers(logger *zap.Logger, grpcServer *grpc.Server, grpcLis net.Listener, httpServer *http.Server, cfg *config.Config) chan error {
+	errCh := make(chan error, 2)
+
+	go func() {
+		logger.Info("gRPC server listening", zap.String("addr", cfg.GRPCAddr))
+		if err := grpcServer.Serve(grpcLis); err != nil {
+			errCh <- fmt.Errorf("gRPC server: %w", err)
+		}
+	}()
+
+	go func() {
+		logger.Info("HTTP gateway listening", zap.String("addr", cfg.HTTPAddr))
+		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			errCh <- fmt.Errorf("HTTP gateway: %w", err)
+		}
+	}()
+
+	return errCh
+}
+
+func gracefulShutdown(logger *zap.Logger, grpcServer *grpc.Server, httpServer *http.Server, errCh chan error) {
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	select {
+	case sig := <-quit:
+		logger.Info("shutting down", zap.String("signal", sig.String()))
+	case err := <-errCh:
+		logger.Error("server error", zap.Error(err))
+	}
+
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+
+	grpcServer.GracefulStop()
+
+	if err := httpServer.Shutdown(shutdownCtx); err != nil {
+		logger.Error("HTTP gateway shutdown error", zap.Error(err))
+	}
+
+	logger.Info("shutdown complete")
+}

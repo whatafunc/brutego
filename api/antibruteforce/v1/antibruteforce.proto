@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package antibruteforce.v1;
 
-option go_package = "github.com/yourorg/anti-bruteforce/pkg/api/antibruteforce/v1;antibruteforcepb";
+option go_package = "github.com/whatafunc/brutego/pkg/api/antibruteforce/v1;antibruteforcepb";
 
 import "google/api/annotations.proto";
 import "google/protobuf/empty.proto";
@@ -13,7 +13,7 @@ import "google/protobuf/empty.proto";
 // gRPC service definition. REST is exposed automatically via grpc-gateway
 // using the google.api.http annotations below. Every REST path in openapi.yaml
 // maps 1-to-1 to an RPC here.
-//
+// Code test: buf lint
 // Code-generation commands (run from repo root):
 //   buf generate
 // or manually:
@@ -66,7 +66,7 @@ service AntiBruteforceService {
   rpc RemoveFromBlacklist(SubnetRequest) returns (google.protobuf.Empty) {
     option (google.api.http) = {
       delete: "/v1/blacklist"
-      body: "*"
+      //body: "*"
     };
   }
 
@@ -86,7 +86,7 @@ service AntiBruteforceService {
   rpc RemoveFromWhitelist(SubnetRequest) returns (google.protobuf.Empty) {
     option (google.api.http) = {
       delete: "/v1/whitelist"
-      body: "*"
+      //body: "*"
     };
   }
 }

@@ -1,5 +1,3 @@
-# buf.gen.yaml  — place at repo root
-# Run: buf generate
 version: v2
 
 plugins:
