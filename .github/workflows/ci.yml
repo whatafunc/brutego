@@ -25,9 +25,10 @@ jobs:
       # Lint — latest golangci-lint with project .golangci.yml
       # -------------------------------------------------------------------
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: latest
+        run: make lint
+        ###uses: golangci/golangci-lint-action@v6
+        ###with:
+        ###  version: latest
 
       # -------------------------------------------------------------------
       # Unit tests  (-race -count 100 as required by the course)
