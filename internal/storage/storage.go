@@ -139,7 +139,7 @@ func (m *MemoryStorage) AddToBlacklist(subnet string) error {
 }
 
 // RemoveFromBlacklist removes a subnet from the blacklist.
-// Returns ErrSubnetNotFound if the subnet is not
+// Returns ErrSubnetNotFound if the subnet is not.
 func (m *MemoryStorage) RemoveFromBlacklist(subnet string) error {
 	return m.blacklist.remove(subnet)
 }
