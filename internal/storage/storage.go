@@ -133,26 +133,36 @@ func NewMemoryStorage() *MemoryStorage {
 	}
 }
 
+// AddToBlacklist adds a subnet to the blacklist.
 func (m *MemoryStorage) AddToBlacklist(subnet string) error {
 	return m.blacklist.add(subnet)
 }
 
+// RemoveFromBlacklist removes a subnet from the blacklist.
+// Returns ErrSubnetNotFound if the subnet is not
 func (m *MemoryStorage) RemoveFromBlacklist(subnet string) error {
 	return m.blacklist.remove(subnet)
 }
 
+// IsBlacklisted checks if the given IP is blacklisted.
 func (m *MemoryStorage) IsBlacklisted(ip string) (bool, error) {
 	return m.blacklist.contains(ip)
 }
 
+// AddToWhitelist adds a subnet to the whitelist.
 func (m *MemoryStorage) AddToWhitelist(subnet string) error {
 	return m.whitelist.add(subnet)
 }
 
+// RemoveFromWhitelist removes a subnet from the whitelist.
+// Returns ErrSubnetNotFound if the subnet is not present.
 func (m *MemoryStorage) RemoveFromWhitelist(subnet string) error {
 	return m.whitelist.remove(subnet)
 }
 
+// IsWhitelisted checks if the given IP is whitelisted.
+// An IP is considered whitelisted if it belongs to any subnet in the whitelist,
+// regardless of blacklist status.
 func (m *MemoryStorage) IsWhitelisted(ip string) (bool, error) {
 	return m.whitelist.contains(ip)
 }
