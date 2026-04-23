@@ -15,7 +15,7 @@ build:
 	$(GO) build -o bin/$(BINARY) $(CMD_PATH)
 
 # ---------------------------------------------------------------------------
-# Run (via docker compose)
+# Run (via docker compose with containers rebuild)
 # ---------------------------------------------------------------------------
 run:
 	docker compose up --build

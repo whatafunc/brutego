@@ -39,78 +39,41 @@ type Storage interface {
 }
 
 // ---------------------------------------------------------------------------
-// In-memory implementation
+// ipSet — a thread-safe set of CIDR subnets with its own mutex.
 // ---------------------------------------------------------------------------
 
-// MemoryStorage is a thread-safe in-memory implementation of Storage.
-// Suitable for single-instance deployments; replace with a DB-backed
-// implementation for multi-instance setups.
-type MemoryStorage struct {
-	mu        sync.RWMutex
-	blacklist map[string]*net.IPNet // key: canonical CIDR string
-	whitelist map[string]*net.IPNet
+// ipSet is an internal type that owns both its data and its lock.
+// blacklist and whitelist are independent instances so they never contend
+// on each other's mutex.
+type ipSet struct {
+	mu      sync.RWMutex
+	subnets map[string]*net.IPNet // key: canonical CIDR string e.g. "192.168.0.0/24"
 }
 
-// NewMemoryStorage creates an empty MemoryStorage.
-func NewMemoryStorage() *MemoryStorage {
-	return &MemoryStorage{
-		blacklist: make(map[string]*net.IPNet),
-		whitelist: make(map[string]*net.IPNet),
+func newIPSet() *ipSet {
+	return &ipSet{
+		subnets: make(map[string]*net.IPNet),
 	}
 }
 
-// AddToBlacklist adds a subnet to the blacklist.
-func (m *MemoryStorage) AddToBlacklist(subnet string) error {
-	return m.addTo(m.blacklist, subnet)
-}
-
-// RemoveFromBlacklist removes a subnet from the blacklist.
-// Returns ErrSubnetNotFound if the subnet is not present.
-func (m *MemoryStorage) RemoveFromBlacklist(subnet string) error {
-	return m.removeFrom(m.blacklist, subnet)
-}
-
-// IsBlacklisted checks if the given IP is blacklisted.
-func (m *MemoryStorage) IsBlacklisted(ip string) (bool, error) {
-	return m.contains(m.blacklist, ip)
-}
-
-// AddToWhitelist adds a subnet to the whitelist.
-func (m *MemoryStorage) AddToWhitelist(subnet string) error {
-	return m.addTo(m.whitelist, subnet)
-}
-
-// RemoveFromWhitelist removes a subnet from the whitelist.
-// Returns ErrSubnetNotFound if the subnet is not present.
-func (m *MemoryStorage) RemoveFromWhitelist(subnet string) error {
-	return m.removeFrom(m.whitelist, subnet)
-}
-
-// IsWhitelisted checks if the given IP is whitelisted.
-// An IP is considered whitelisted if it belongs to any subnet in the whitelist,
-// regardless of blacklist status.
-func (m *MemoryStorage) IsWhitelisted(ip string) (bool, error) {
-	return m.contains(m.whitelist, ip)
-}
-
-// ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
-
-func (m *MemoryStorage) addTo(list map[string]*net.IPNet, cidr string) error {
+// add parses cidr and inserts it into the list.
+// Returns ErrInvalidSubnet if cidr cannot be parsed.
+func (l *ipSet) add(cidr string) error {
 	_, network, err := net.ParseCIDR(cidr)
 	if err != nil {
 		return fmt.Errorf("%w: %s", ErrInvalidSubnet, cidr)
 	}
 
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	l.mu.Lock()
+	defer l.mu.Unlock()
 
-	list[network.String()] = network
+	l.subnets[network.String()] = network
 	return nil
 }
 
-func (m *MemoryStorage) removeFrom(list map[string]*net.IPNet, cidr string) error {
+// remove deletes cidr from the list.
+// Returns ErrSubnetNotFound if cidr is not present, ErrInvalidSubnet if unparseable.
+func (l *ipSet) remove(cidr string) error {
 	_, network, err := net.ParseCIDR(cidr)
 	if err != nil {
 		return fmt.Errorf("%w: %s", ErrInvalidSubnet, cidr)
@@ -118,31 +81,78 @@ func (m *MemoryStorage) removeFrom(list map[string]*net.IPNet, cidr string) erro
 
 	key := network.String()
 
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	l.mu.Lock()
+	defer l.mu.Unlock()
 
-	if _, ok := list[key]; !ok {
+	if _, ok := l.subnets[key]; !ok {
 		return fmt.Errorf("%w: %s", ErrSubnetNotFound, cidr)
 	}
 
-	delete(list, key)
+	delete(l.subnets, key)
 	return nil
 }
 
-func (m *MemoryStorage) contains(list map[string]*net.IPNet, ipStr string) (bool, error) {
+// contains reports whether ipStr falls within any subnet in the list.
+// Returns an error if ipStr is not a valid IP address.
+func (l *ipSet) contains(ipStr string) (bool, error) {
 	ip := net.ParseIP(ipStr)
 	if ip == nil {
 		return false, fmt.Errorf("invalid IP address: %s", ipStr)
 	}
 
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	l.mu.RLock()
+	defer l.mu.RUnlock()
 
-	for _, network := range list {
+	for _, network := range l.subnets {
 		if network.Contains(ip) {
 			return true, nil
 		}
 	}
 
 	return false, nil
+}
+
+// ---------------------------------------------------------------------------
+// MemoryStorage — in-memory implementation of Storage.
+// ---------------------------------------------------------------------------
+
+// MemoryStorage is a thread-safe (new / after review) in-memory implementation of Storage.
+// blacklist and whitelist each own their mutex so they never block each other.
+// Suitable for single-instance deployments; replace with a DB-backed
+// implementation for multi-instance setups.
+type MemoryStorage struct {
+	blacklist *ipSet
+	whitelist *ipSet
+}
+
+// NewMemoryStorage creates an empty MemoryStorage.
+func NewMemoryStorage() *MemoryStorage {
+	return &MemoryStorage{
+		blacklist: newIPSet(),
+		whitelist: newIPSet(),
+	}
+}
+
+func (m *MemoryStorage) AddToBlacklist(subnet string) error {
+	return m.blacklist.add(subnet)
+}
+
+func (m *MemoryStorage) RemoveFromBlacklist(subnet string) error {
+	return m.blacklist.remove(subnet)
+}
+
+func (m *MemoryStorage) IsBlacklisted(ip string) (bool, error) {
+	return m.blacklist.contains(ip)
+}
+
+func (m *MemoryStorage) AddToWhitelist(subnet string) error {
+	return m.whitelist.add(subnet)
+}
+
+func (m *MemoryStorage) RemoveFromWhitelist(subnet string) error {
+	return m.whitelist.remove(subnet)
+}
+
+func (m *MemoryStorage) IsWhitelisted(ip string) (bool, error) {
+	return m.whitelist.contains(ip)
 }
