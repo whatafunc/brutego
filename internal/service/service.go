@@ -4,6 +4,7 @@ package service
 import (
 	"context"
 	"errors"
+	"net"
 
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
@@ -62,23 +63,18 @@ func (s *Service) CheckAuth(_ context.Context, req *pb.CheckAuthRequest) (*pb.Ch
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
-	// 1. Whitelist check — short-circuit allow.
-	whitelisted, err := s.storage.IsWhitelisted(req.Ip)
-	if err != nil {
-		s.log.Error("whitelist check failed", zap.String("ip", req.Ip), zap.Error(err))
-		return nil, status.Error(codes.Internal, "whitelist check failed")
+	ip := net.ParseIP(req.Ip)
+	if ip == nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid ip address: %s", req.Ip)
 	}
-	if whitelisted {
+
+	// 1. Whitelist check — short-circuit allow.
+	if s.storage.IsWhitelisted(ip) {
 		return &pb.CheckAuthResponse{Ok: true}, nil
 	}
 
 	// 2. Blacklist check — short-circuit deny.
-	blacklisted, err := s.storage.IsBlacklisted(req.Ip)
-	if err != nil {
-		s.log.Error("blacklist check failed", zap.String("ip", req.Ip), zap.Error(err))
-		return nil, status.Error(codes.Internal, "blacklist check failed")
-	}
-	if blacklisted {
+	if s.storage.IsBlacklisted(ip) {
 		return &pb.CheckAuthResponse{Ok: false}, nil
 	}
 
@@ -112,15 +108,23 @@ func (s *Service) ResetBucket(_ context.Context, req *pb.ResetBucketRequest) (*e
 
 // AddToBlacklist adds a CIDR subnet to the blacklist.
 func (s *Service) AddToBlacklist(_ context.Context, req *pb.SubnetRequest) (*emptypb.Empty, error) {
-	if err := s.storage.AddToBlacklist(req.Subnet); err != nil {
-		return nil, subnetError(err, req.Subnet)
+	_, network, err := net.ParseCIDR(req.Subnet)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid subnet: %s", req.Subnet)
+	}
+	if err := s.storage.AddToBlacklist(network); err != nil {
+		return nil, status.Errorf(codes.Internal, "storage error: %v", err)
 	}
 	return &emptypb.Empty{}, nil
 }
 
 // RemoveFromBlacklist removes a CIDR subnet from the blacklist.
 func (s *Service) RemoveFromBlacklist(_ context.Context, req *pb.SubnetRequest) (*emptypb.Empty, error) {
-	if err := s.storage.RemoveFromBlacklist(req.Subnet); err != nil {
+	_, network, err := net.ParseCIDR(req.Subnet)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid subnet: %s", req.Subnet)
+	}
+	if err := s.storage.RemoveFromBlacklist(network); err != nil {
 		return nil, subnetError(err, req.Subnet)
 	}
 	return &emptypb.Empty{}, nil
@@ -132,15 +136,23 @@ func (s *Service) RemoveFromBlacklist(_ context.Context, req *pb.SubnetRequest) 
 
 // AddToWhitelist adds a CIDR subnet to the whitelist.
 func (s *Service) AddToWhitelist(_ context.Context, req *pb.SubnetRequest) (*emptypb.Empty, error) {
-	if err := s.storage.AddToWhitelist(req.Subnet); err != nil {
-		return nil, subnetError(err, req.Subnet)
+	_, network, err := net.ParseCIDR(req.Subnet)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid subnet: %s", req.Subnet)
+	}
+	if err := s.storage.AddToWhitelist(network); err != nil {
+		return nil, status.Errorf(codes.Internal, "storage error: %v", err)
 	}
 	return &emptypb.Empty{}, nil
 }
 
 // RemoveFromWhitelist removes a CIDR subnet from the whitelist.
 func (s *Service) RemoveFromWhitelist(_ context.Context, req *pb.SubnetRequest) (*emptypb.Empty, error) {
-	if err := s.storage.RemoveFromWhitelist(req.Subnet); err != nil {
+	_, network, err := net.ParseCIDR(req.Subnet)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid subnet: %s", req.Subnet)
+	}
+	if err := s.storage.RemoveFromWhitelist(network); err != nil {
 		return nil, subnetError(err, req.Subnet)
 	}
 	return &emptypb.Empty{}, nil
@@ -163,13 +175,12 @@ func validateCheckAuth(req *pb.CheckAuthRequest) error {
 	return nil
 }
 
+// subnetError maps storage errors to gRPC status codes.
+// Only ErrSubnetNotFound is expected from storage now — invalid subnet is
+// caught by net.ParseCIDR in the service layer before reaching storage.
 func subnetError(err error, subnet string) error {
-	switch {
-	case errors.Is(err, storage.ErrSubnetNotFound):
+	if errors.Is(err, storage.ErrSubnetNotFound) {
 		return status.Errorf(codes.NotFound, "subnet not found: %s", subnet)
-	case errors.Is(err, storage.ErrInvalidSubnet):
-		return status.Errorf(codes.InvalidArgument, "invalid subnet: %s", subnet)
-	default:
-		return status.Errorf(codes.Internal, "storage error: %v", err)
 	}
+	return status.Errorf(codes.Internal, "storage error: %v", err)
 }

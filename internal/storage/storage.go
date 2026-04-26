@@ -10,32 +10,29 @@ import (
 // ErrSubnetNotFound is returned when a subnet to be deleted does not exist.
 var ErrSubnetNotFound = fmt.Errorf("subnet not found")
 
-// ErrInvalidSubnet is returned when a CIDR string cannot be parsed.
-var ErrInvalidSubnet = fmt.Errorf("invalid subnet")
-
 // Storage defines the persistence contract for whitelist/blacklist management.
+// All methods accept already-parsed net types — parsing and validation is the
+// responsibility of the caller (service layer).
 type Storage interface {
-	// AddToBlacklist adds a CIDR subnet to the blacklist.
-	AddToBlacklist(subnet string) error
+	// AddToBlacklist adds a parsed subnet to the blacklist.
+	AddToBlacklist(network *net.IPNet) error
 
-	// RemoveFromBlacklist removes a CIDR subnet from the blacklist.
+	// RemoveFromBlacklist removes a subnet from the blacklist.
 	// Returns ErrSubnetNotFound if the subnet is not present.
-	RemoveFromBlacklist(subnet string) error
+	RemoveFromBlacklist(network *net.IPNet) error
 
-	// IsBlacklisted reports whether the given IPv4 address belongs to any
-	// blacklisted subnet.
-	IsBlacklisted(ip string) (bool, error)
+	// IsBlacklisted reports whether ip belongs to any blacklisted subnet.
+	IsBlacklisted(ip net.IP) bool
 
-	// AddToWhitelist adds a CIDR subnet to the whitelist.
-	AddToWhitelist(subnet string) error
+	// AddToWhitelist adds a parsed subnet to the whitelist.
+	AddToWhitelist(network *net.IPNet) error
 
-	// RemoveFromWhitelist removes a CIDR subnet from the whitelist.
+	// RemoveFromWhitelist removes a subnet from the whitelist.
 	// Returns ErrSubnetNotFound if the subnet is not present.
-	RemoveFromWhitelist(subnet string) error
+	RemoveFromWhitelist(network *net.IPNet) error
 
-	// IsWhitelisted reports whether the given IPv4 address belongs to any
-	// whitelisted subnet.
-	IsWhitelisted(ip string) (bool, error)
+	// IsWhitelisted reports whether ip belongs to any whitelisted subnet.
+	IsWhitelisted(ip net.IP) bool
 }
 
 // ---------------------------------------------------------------------------
@@ -56,60 +53,41 @@ func newIPSet() *ipSet {
 	}
 }
 
-// add parses cidr and inserts it into the list.
-// Returns ErrInvalidSubnet if cidr cannot be parsed.
-func (l *ipSet) add(cidr string) error {
-	_, network, err := net.ParseCIDR(cidr)
-	if err != nil {
-		return fmt.Errorf("%w: %s", ErrInvalidSubnet, cidr)
-	}
-
+// add inserts an already-parsed network into the set.
+func (l *ipSet) add(network *net.IPNet) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-
 	l.subnets[network.String()] = network
-	return nil
 }
 
-// remove deletes cidr from the list.
-// Returns ErrSubnetNotFound if cidr is not present, ErrInvalidSubnet if unparseable.
-func (l *ipSet) remove(cidr string) error {
-	_, network, err := net.ParseCIDR(cidr)
-	if err != nil {
-		return fmt.Errorf("%w: %s", ErrInvalidSubnet, cidr)
-	}
-
+// remove deletes a network from the set.
+// Returns ErrSubnetNotFound if it is not present.
+func (l *ipSet) remove(network *net.IPNet) error {
 	key := network.String()
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
 	if _, ok := l.subnets[key]; !ok {
-		return fmt.Errorf("%w: %s", ErrSubnetNotFound, cidr)
+		return fmt.Errorf("%w: %s", ErrSubnetNotFound, key)
 	}
 
 	delete(l.subnets, key)
 	return nil
 }
 
-// contains reports whether ipStr falls within any subnet in the list.
-// Returns an error if ipStr is not a valid IP address.
-func (l *ipSet) contains(ipStr string) (bool, error) {
-	ip := net.ParseIP(ipStr)
-	if ip == nil {
-		return false, fmt.Errorf("invalid IP address: %s", ipStr)
-	}
-
+// contains reports whether ip falls within any subnet in the set.
+func (l *ipSet) contains(ip net.IP) bool {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
 	for _, network := range l.subnets {
 		if network.Contains(ip) {
-			return true, nil
+			return true
 		}
 	}
 
-	return false, nil
+	return false
 }
 
 // ---------------------------------------------------------------------------
@@ -134,35 +112,35 @@ func NewMemoryStorage() *MemoryStorage {
 }
 
 // AddToBlacklist adds a subnet to the blacklist.
-func (m *MemoryStorage) AddToBlacklist(subnet string) error {
-	return m.blacklist.add(subnet)
+func (m *MemoryStorage) AddToBlacklist(network *net.IPNet) error {
+	m.blacklist.add(network)
+	return nil
 }
 
 // RemoveFromBlacklist removes a subnet from the blacklist.
-// Returns ErrSubnetNotFound if the subnet is not.
-func (m *MemoryStorage) RemoveFromBlacklist(subnet string) error {
-	return m.blacklist.remove(subnet)
+func (m *MemoryStorage) RemoveFromBlacklist(network *net.IPNet) error {
+	return m.blacklist.remove(network)
 }
 
 // IsBlacklisted checks if the given IP is blacklisted.
-func (m *MemoryStorage) IsBlacklisted(ip string) (bool, error) {
+func (m *MemoryStorage) IsBlacklisted(ip net.IP) bool {
 	return m.blacklist.contains(ip)
 }
 
 // AddToWhitelist adds a subnet to the whitelist.
-func (m *MemoryStorage) AddToWhitelist(subnet string) error {
-	return m.whitelist.add(subnet)
+func (m *MemoryStorage) AddToWhitelist(network *net.IPNet) error {
+	m.whitelist.add(network)
+	return nil
 }
 
 // RemoveFromWhitelist removes a subnet from the whitelist.
-// Returns ErrSubnetNotFound if the subnet is not present.
-func (m *MemoryStorage) RemoveFromWhitelist(subnet string) error {
-	return m.whitelist.remove(subnet)
+func (m *MemoryStorage) RemoveFromWhitelist(network *net.IPNet) error {
+	return m.whitelist.remove(network)
 }
 
 // IsWhitelisted checks if the given IP is whitelisted.
 // An IP is considered whitelisted if it belongs to any subnet in the whitelist,
 // regardless of blacklist status.
-func (m *MemoryStorage) IsWhitelisted(ip string) (bool, error) {
+func (m *MemoryStorage) IsWhitelisted(ip net.IP) bool {
 	return m.whitelist.contains(ip)
 }
