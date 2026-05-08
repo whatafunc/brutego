@@ -169,7 +169,7 @@ func TestResetBucket_ClearsLoginBucket(t *testing.T) {
 	require.True(t, resp.Ok)
 
 	// reset
-	_, err := svc.ResetBucket(context.Background(), &pb.ResetBucketRequest{
+	_, err = svc.ResetBucket(context.Background(), &pb.ResetBucketRequest{
 		Login: validReq.Login,
 		Ip:    validReq.Ip,
 	})
