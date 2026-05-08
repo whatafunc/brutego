@@ -164,7 +164,7 @@ func TestResetBucket_ClearsLoginBucket(t *testing.T) {
 	svc := newService(t, &mockStorage{}, 1)
 
 	// exhaust the login bucket
-	resp, err := svc.CheckAuth(context.Background(), validReq))
+	resp, err := svc.CheckAuth(context.Background(), validReq)
 	require.NoError(t, err)
 	require.True(t, resp.Ok)
 
