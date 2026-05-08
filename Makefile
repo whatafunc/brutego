@@ -3,7 +3,7 @@ CMD_PATH   := ./cmd/server
 GO         := go
 GOFLAGS    := -race
 #LINT_VER   := latest # appears to be v2 now
-LINT_VER   := v1.64.8
+LINT_VER   := v2.12.2
 
 
 .PHONY: all build run test lint generate clean docker-build docker-run
