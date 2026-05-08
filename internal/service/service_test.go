@@ -8,7 +8,7 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-
+	"github.com/stretchr/testify/require"
 	pb "github.com/whatafunc/brutego/pkg/api/antibruteforce/v1"
 	"github.com/whatafunc/brutego/internal/service"
 	"github.com/whatafunc/brutego/internal/storage"
@@ -164,7 +164,7 @@ func TestResetBucket_ClearsLoginBucket(t *testing.T) {
 	svc := newService(t, &mockStorage{}, 1)
 
 	// exhaust the login bucket
-	svc.CheckAuth(context.Background(), validReq) //nolint:errcheck
+	require.NoError(t, svc.CheckAuth(context.Background(), validReq))
 
 	// reset
 	_, err := svc.ResetBucket(context.Background(), &pb.ResetBucketRequest{

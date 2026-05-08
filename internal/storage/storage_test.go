@@ -104,7 +104,7 @@ func TestMemoryStorage_Whitelist_AddAndContains(t *testing.T) {
 	network := mustParseCIDR(t, "10.0.0.0/8")
 	ip := mustParseIP(t, "10.1.2.3")
 
-	s.AddToWhitelist(network) //nolint:errcheck
+	require.NoError(t, s.AddToWhitelist(network))
 
 	if !s.IsWhitelisted(ip) {
 		t.Fatal("expected IP is supposed to be whitelisted")
