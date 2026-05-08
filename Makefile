@@ -2,8 +2,8 @@ BINARY     := anti-bruteforce
 CMD_PATH   := ./cmd/server
 GO         := go
 GOFLAGS    := -race
-#LINT_VER   := latest
-LINT_VER   := v1.60.3
+#LINT_VER   := latest # appears to be v2 now
+LINT_VER   := v1.64.8
 
 
 .PHONY: all build run test lint generate clean docker-build docker-run
