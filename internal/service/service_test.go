@@ -178,7 +178,7 @@ func TestResetBucket_ClearsLoginBucket(t *testing.T) {
 	}
 
 	// should be allowed again
-	resp, err := svc.CheckAuth(context.Background(), validReq)
+	resp, err = svc.CheckAuth(context.Background(), validReq)
 	if err != nil || !resp.Ok {
 		t.Fatal("expected ok=true after bucket reset")
 	}
