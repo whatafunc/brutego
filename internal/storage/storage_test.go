@@ -42,7 +42,7 @@ func TestMemoryStorage_Blacklist_AddAndContains(t *testing.T) {
 	network := mustParseCIDR(t, "192.168.5.0/24")
 	ip := mustParseIP(t, "192.168.5.42")
 
-	s.AddToBlacklist(network) //nolint:errcheck
+	require.NoError(t, s.AddToBlacklist(network))
 
 	if !s.IsBlacklisted(ip) {
 		t.Fatal("expected IP to be blacklisted")
@@ -56,7 +56,7 @@ func TestMemoryStorage_Blacklist_IPOutsideSubnet(t *testing.T) {
 	network := mustParseCIDR(t, "192.168.5.0/24")
 	ip := mustParseIP(t, "10.0.0.1")
 
-	s.AddToBlacklist(network) //nolint:errcheck
+	require.NoError(t, s.AddToBlacklist(network))
 
 	if s.IsBlacklisted(ip) {
 		t.Fatal("expected IP outside subnet to not be blacklisted")
@@ -70,7 +70,7 @@ func TestMemoryStorage_Blacklist_Remove(t *testing.T) {
 	network := mustParseCIDR(t, "192.168.5.0/24")
 	ip := mustParseIP(t, "192.168.5.1")
 
-	s.AddToBlacklist(network) //nolint:errcheck
+	require.NoError(t, s.AddToBlacklist(network))
 
 	if err := s.RemoveFromBlacklist(network); err != nil {
 		t.Fatalf("unexpected error on remove: %v", err)
@@ -134,7 +134,7 @@ func TestMemoryStorage_BlacklistAndWhitelist_AreIndependent(t *testing.T) {
 	network := mustParseCIDR(t, "192.168.0.0/16")
 	ip := mustParseIP(t, "192.168.1.1")
 
-	s.AddToBlacklist(network) //nolint:errcheck
+	require.NoError(t, s.AddToBlacklist(network))
 
 	if s.IsWhitelisted(ip) {
 		t.Fatal("blacklisted subnet should not affect whitelist")
