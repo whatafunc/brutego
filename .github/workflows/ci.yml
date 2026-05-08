@@ -21,6 +21,11 @@ jobs:
           go-version: "1.25"
           cache: true
 
+      - name: Download dependencies
+        run: |
+          go mod tidy
+          go mod download
+
       # -------------------------------------------------------------------
       # Lint — latest golangci-lint with project .golangci.yml
       # -------------------------------------------------------------------
