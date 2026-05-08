@@ -1,6 +1,6 @@
 module github.com/whatafunc/brutego
 
-go 1.25
+go 1.25.6
 
 require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.28.0
