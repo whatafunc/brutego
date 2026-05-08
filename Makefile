@@ -3,7 +3,7 @@ CMD_PATH   := ./cmd/server
 GO         := go
 GOFLAGS    := -race
 #LINT_VER   := latest # appears to be v2 now
-LINT_VER   := v2.12.2
+#LINT_VER   := v2.12.2
 
 
 .PHONY: all build run test lint generate clean docker-build docker-run
@@ -39,9 +39,9 @@ test-cover:
 # Lint  (always fetches the latest golangci-lint version)
 # ---------------------------------------------------------------------------
 lint:
-	@which golangci-lint > /dev/null 2>&1 || \
-		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh \
-		| sh -s -- -b $$(go env GOPATH)/bin $(LINT_VER)
+	# @which golangci-lint > /dev/null 2>&1 || \
+	#	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh \
+	#	| sh -s -- -b $$(go env GOPATH)/bin $(LINT_VER)
 	golangci-lint run ./...
 
 # ---------------------------------------------------------------------------
