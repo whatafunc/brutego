@@ -35,6 +35,11 @@ test-cover:
 	$(GO) test $(GOFLAGS) -count=1 -coverprofile=coverage.out ./...
 	$(GO) tool cover -html=coverage.out -o coverage.html
 
+test-code-in-dcoker:
+	docker run --rm -it  -v "${PWD}":/app -w /app  golang:1.25 \
+	bash
+	##go test ./internal/...
+
 # ---------------------------------------------------------------------------
 # Lint  (always fetches the latest golangci-lint version)
 # ---------------------------------------------------------------------------
