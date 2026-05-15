@@ -24,8 +24,8 @@ func TestNew(t *testing.T) {
 			name:     "default values when no env vars set",
 			setupEnv: func() {},
 			want: &Config{
-				GRPCAddr:    ":defaultGRPCAddr",
-				HTTPAddr:    ":defaultHTTPAddr",
+				GRPCAddr:    defaultGRPCAddr,
+				HTTPAddr:    defaultHTTPAddr,
 				LoginRPM:    1,
 				PasswordRPM: 100,
 				IPRPM:       1000,
@@ -39,7 +39,7 @@ func TestNew(t *testing.T) {
 			},
 			want: &Config{
 				GRPCAddr:    ":9090",
-				HTTPAddr:    ":defaultHTTPAddr",
+				HTTPAddr:    defaultHTTPAddr,
 				LoginRPM:    1,
 				PasswordRPM: 100,
 				IPRPM:       1000,
@@ -52,7 +52,7 @@ func TestNew(t *testing.T) {
 				_ = os.Setenv("HTTP_ADDR", ":8888")
 			},
 			want: &Config{
-				GRPCAddr:    ":defaultGRPCAddr",
+				GRPCAddr:    defaultGRPCAddr,
 				HTTPAddr:    ":8888",
 				LoginRPM:    1,
 				PasswordRPM: 100,
@@ -66,8 +66,8 @@ func TestNew(t *testing.T) {
 				_ = os.Setenv("LIMIT_LOGIN", "20")
 			},
 			want: &Config{
-				GRPCAddr:    ":defaultGRPCAddr",
-				HTTPAddr:    ":defaultHTTPAddr",
+				GRPCAddr:    defaultGRPCAddr,
+				HTTPAddr:    defaultHTTPAddr,
 				LoginRPM:    20,
 				PasswordRPM: 100,
 				IPRPM:       1000,
@@ -80,8 +80,8 @@ func TestNew(t *testing.T) {
 				_ = os.Setenv("LIMIT_PASSWORD", "200")
 			},
 			want: &Config{
-				GRPCAddr:    ":defaultGRPCAddr",
-				HTTPAddr:    ":defaultHTTPAddr",
+				GRPCAddr:    defaultGRPCAddr,
+				HTTPAddr:    defaultHTTPAddr,
 				LoginRPM:    1,
 				PasswordRPM: 200,
 				IPRPM:       1000,
@@ -94,8 +94,8 @@ func TestNew(t *testing.T) {
 				_ = os.Setenv("LIMIT_IP", "5000")
 			},
 			want: &Config{
-				GRPCAddr:    ":defaultGRPCAddr",
-				HTTPAddr:    ":defaultHTTPAddr",
+				GRPCAddr:    defaultGRPCAddr,
+				HTTPAddr:    defaultHTTPAddr,
 				LoginRPM:    1,
 				PasswordRPM: 100,
 				IPRPM:       5000,
