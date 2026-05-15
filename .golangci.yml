@@ -1,0 +1,64 @@
+version: "2"
+
+run:
+  tests: true
+
+linters-settings:
+  funlen:
+    lines: 150
+    statements: 80
+
+linters:
+  disable-all: true
+  enable:
+    - asciicheck
+    - bodyclose
+    #  - depguard ## config not working in v2 - use packages-key instead
+    - dogsled
+    - dogsled
+    - dupl
+    - durationcheck
+    - errorlint
+    - exhaustive
+    - funlen
+    #  - gci ## it's a formatter, not a linter in v2
+    - gocognit
+    - goconst
+    - gocritic
+    - gocyclo
+    - godot
+  #  - gofmt ## it's a formatter, not a linter in v2
+  #  - gofumpt
+    - goheader
+    - gomoddirectives
+    - gomodguard
+    - goprintffuncname
+    - gosec
+    - govet
+    - importas
+    - ineffassign
+    - lll
+    - makezero
+    - misspell
+    - nestif
+    - nilerr
+    - noctx
+    - nolintlint
+    - prealloc
+    - predeclared
+    - revive
+    - rowserrcheck
+    - sqlclosecheck
+    - staticcheck
+  #  - structcheck ##  now part of unused
+  #  - stylecheck  ## merged into revive or govet
+    - tagliatelle
+    - thelper
+    - tparallel
+  #  - typecheck ## typecheck - it's not a standalone linter in v2 (it's part of govet)
+    - unconvert
+    - unparam
+    - unused
+  #  - varcheck ## varcheck -  now part of unused
+    - wastedassign
+    - whitespace

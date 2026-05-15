@@ -1,0 +1,2044 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>server: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">github.com/whatafunc/brutego/cmd/server/main.go (0.0%)</option>
+				
+				<option value="file1">github.com/whatafunc/brutego/internal/bucket/bucket.go (74.4%)</option>
+				
+				<option value="file2">github.com/whatafunc/brutego/internal/config/config.go (0.0%)</option>
+				
+				<option value="file3">github.com/whatafunc/brutego/internal/service/service.go (0.0%)</option>
+				
+				<option value="file4">github.com/whatafunc/brutego/internal/storage/storage.go (0.0%)</option>
+				
+				<option value="file5">github.com/whatafunc/brutego/pkg/api/antibruteforce/v1/antibruteforce.pb.go (0.0%)</option>
+				
+				<option value="file6">github.com/whatafunc/brutego/pkg/api/antibruteforce/v1/antibruteforce.pb.gw.go (0.0%)</option>
+				
+				<option value="file7">github.com/whatafunc/brutego/pkg/api/antibruteforce/v1/antibruteforce_grpc.pb.go (0.0%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">no coverage</span>
+				<span class="cov1">low coverage</span>
+				<span class="cov2">*</span>
+				<span class="cov3">*</span>
+				<span class="cov4">*</span>
+				<span class="cov5">*</span>
+				<span class="cov6">*</span>
+				<span class="cov7">*</span>
+				<span class="cov8">*</span>
+				<span class="cov9">*</span>
+				<span class="cov10">high coverage</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">// Package main provides the app's entry point, setting up the gRPC server and HTTP gateway.
+package main
+
+import (
+        "context"
+        "errors"
+        "fmt"
+        "net"
+        "net/http"
+        "os"
+        "os/signal"
+        "syscall"
+        "time"
+
+        "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+        "go.uber.org/zap"
+        "google.golang.org/grpc"
+        "google.golang.org/grpc/credentials/insecure"
+        "google.golang.org/grpc/reflection"
+
+        "github.com/whatafunc/brutego/internal/config"
+        "github.com/whatafunc/brutego/internal/service"
+        "github.com/whatafunc/brutego/internal/storage"
+        pb "github.com/whatafunc/brutego/pkg/api/antibruteforce/v1"
+)
+
+func main() <span class="cov0" title="0">{
+        logger := mustInitLogger()
+        defer func() </span><span class="cov0" title="0">{ _ = logger.Sync() }</span>()
+
+        <span class="cov0" title="0">cfg := mustLoadConfig(logger)
+
+        svc := buildService(logger, cfg)
+
+        grpcServer, grpcLis := mustCreateGRPCServer(logger, cfg, svc)
+        httpServer := mustCreateHTTPServer(logger, cfg)
+
+        run(logger, grpcServer, grpcLis, httpServer)</span>
+}
+
+// -----------------------------------------------------------------------------
+// Bootstrap
+// -----------------------------------------------------------------------------
+
+func mustInitLogger() *zap.Logger <span class="cov0" title="0">{
+        logger, err := zap.NewProduction()
+        if err != nil </span><span class="cov0" title="0">{
+                fmt.Fprintf(os.Stderr, "failed to init logger: %v\n", err)
+                os.Exit(1)
+        }</span>
+        <span class="cov0" title="0">return logger</span>
+}
+
+func mustLoadConfig(logger *zap.Logger) *config.Config <span class="cov0" title="0">{
+        cfg, err := config.New()
+        if err != nil </span><span class="cov0" title="0">{
+                logger.Fatal("failed to load config", zap.Error(err))
+        }</span>
+        <span class="cov0" title="0">return cfg</span>
+}
+
+func buildService(logger *zap.Logger, cfg *config.Config) pb.AntiBruteforceServiceServer <span class="cov0" title="0">{
+        store := storage.NewMemoryStorage()
+
+        return service.New(service.Deps{
+                Logger:  logger,
+                Storage: store,
+                Limits: service.Limits{
+                        LoginRPM:    cfg.LoginRPM,
+                        PasswordRPM: cfg.PasswordRPM,
+                        IPRPM:       cfg.IPRPM,
+                },
+        })
+}</span>
+
+// -----------------------------------------------------------------------------
+// Servers
+// -----------------------------------------------------------------------------
+
+func mustCreateGRPCServer(
+        logger *zap.Logger,
+        cfg *config.Config,
+        svc pb.AntiBruteforceServiceServer,
+) (*grpc.Server, net.Listener) <span class="cov0" title="0">{
+        server := grpc.NewServer(
+                grpc.ChainUnaryInterceptor(loggingInterceptor(logger)),
+        )
+
+        pb.RegisterAntiBruteforceServiceServer(server, svc)
+        reflection.Register(server)
+
+        ctx := context.Background()
+        lc := &amp;net.ListenConfig{}
+        grpcLis, err := lc.Listen(ctx, "tcp", cfg.GRPCAddr)
+        if err != nil </span><span class="cov0" title="0">{
+                logger.Fatal("failed to listen gRPC", zap.String("addr", cfg.GRPCAddr), zap.Error(err))
+        }</span>
+
+        <span class="cov0" title="0">return server, grpcLis</span>
+}
+
+func mustCreateHTTPServer(logger *zap.Logger, cfg *config.Config) *http.Server <span class="cov0" title="0">{
+        ctx := context.Background()
+
+        gwMux := runtime.NewServeMux()
+        dialOpts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
+
+        if err := pb.RegisterAntiBruteforceServiceHandlerFromEndpoint(
+                ctx, gwMux, cfg.GRPCAddr, dialOpts,
+        ); err != nil </span><span class="cov0" title="0">{
+                logger.Fatal("failed to register gateway", zap.Error(err))
+        }</span>
+
+        <span class="cov0" title="0">return &amp;http.Server{
+                Addr:         cfg.HTTPAddr,
+                Handler:      gwMux,
+                ReadTimeout:  5 * time.Second,
+                WriteTimeout: 10 * time.Second,
+                IdleTimeout:  60 * time.Second,
+        }</span>
+}
+
+// -----------------------------------------------------------------------------
+// Run &amp; Shutdown
+// -----------------------------------------------------------------------------
+
+func run(
+        logger *zap.Logger,
+        grpcServer *grpc.Server,
+        grpcLis net.Listener,
+        httpServer *http.Server,
+) <span class="cov0" title="0">{
+        errCh := make(chan error, 2)
+
+        go func() </span><span class="cov0" title="0">{
+                logger.Info("gRPC server listening", zap.String("addr", grpcLis.Addr().String()))
+                if err := grpcServer.Serve(grpcLis); err != nil </span><span class="cov0" title="0">{
+                        errCh &lt;- fmt.Errorf("gRPC server: %w", err)
+                }</span>
+        }()
+
+        <span class="cov0" title="0">go func() </span><span class="cov0" title="0">{
+                logger.Info("HTTP gateway listening", zap.String("addr", httpServer.Addr))
+                if err := httpServer.ListenAndServe(); err != nil &amp;&amp; !errors.Is(err, http.ErrServerClosed) </span><span class="cov0" title="0">{
+                        errCh &lt;- fmt.Errorf("HTTP gateway: %w", err)
+                }</span>
+        }()
+
+        <span class="cov0" title="0">waitForShutdown(logger, grpcServer, httpServer, errCh)</span>
+}
+
+func waitForShutdown(
+        logger *zap.Logger,
+        grpcServer *grpc.Server,
+        httpServer *http.Server,
+        errCh chan error,
+) <span class="cov0" title="0">{
+        quit := make(chan os.Signal, 1)
+        signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+        defer signal.Stop(quit)
+
+        select </span>{
+        case sig := &lt;-quit:<span class="cov0" title="0">
+                logger.Info("shutting down", zap.String("signal", sig.String()))</span>
+        case err := &lt;-errCh:<span class="cov0" title="0">
+                logger.Error("server error", zap.Error(err))</span>
+        }
+
+        <span class="cov0" title="0">ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+        defer cancel()
+
+        grpcServer.GracefulStop()
+
+        if err := httpServer.Shutdown(ctx); err != nil </span><span class="cov0" title="0">{
+                logger.Error("HTTP gateway shutdown error", zap.Error(err))
+        }</span>
+
+        <span class="cov0" title="0">logger.Info("shutdown complete")</span>
+}
+
+// -----------------------------------------------------------------------------
+// Interceptors
+// -----------------------------------------------------------------------------
+
+func loggingInterceptor(logger *zap.Logger) grpc.UnaryServerInterceptor <span class="cov0" title="0">{
+        return func(
+                ctx context.Context,
+                req interface{},
+                info *grpc.UnaryServerInfo,
+                handler grpc.UnaryHandler,
+        ) (interface{}, error) </span><span class="cov0" title="0">{
+                start := time.Now()
+
+                resp, err := handler(ctx, req)
+
+                logger.Info("gRPC call",
+                        zap.String("method", info.FullMethod),
+                        zap.Duration("duration", time.Since(start)),
+                        zap.Error(err),
+                )
+
+                return resp, err
+        }</span>
+}</pre>
+		
+		<pre class="file" id="file1" style="display: none">// Package bucket implements a leaky-bucket rate limiter.
+//
+// Each Bucket tracks the number of requests in the current minute window.
+// When Allow() is called:
+//   - if the window has expired, the counter resets to 1 and the call is allowed.
+//   - if the counter is below the limit, it increments and the call is allowed.
+//   - otherwise the call is denied.
+//
+// This is the core logic unit covered by unit tests.
+package bucket
+
+import (
+        "sync"
+        "time"
+)
+
+// Bucket is a single rate-limit counter for one key (login / password / IP).
+// It is safe for concurrent use.
+type Bucket struct {
+        mu        sync.Mutex
+        limit     int       // max requests per window
+        count     int       // requests in current window
+        windowEnd time.Time // when the current window expires
+}
+
+// New creates a Bucket with the given requests-per-minute limit.
+func New(limit int) *Bucket <span class="cov5" title="28">{
+        return &amp;Bucket{
+                limit:     limit,
+                windowEnd: time.Now().Add(time.Minute),
+        }
+}</span>
+
+// Allow reports whether the next request should be allowed.
+// It advances the window automatically when it expires.
+func (b *Bucket) Allow() bool <span class="cov10" title="722">{
+        b.mu.Lock()
+        defer b.mu.Unlock()
+
+        now := time.Now()
+        if now.After(b.windowEnd) </span><span class="cov0" title="0">{
+                // New window — reset counter.
+                b.count = 0
+                b.windowEnd = now.Add(time.Minute)
+        }</span>
+
+        <span class="cov10" title="722">if b.count &gt;= b.limit </span><span class="cov9" title="504">{
+                return false
+        }</span>
+
+        <span class="cov8" title="218">b.count++
+        return true</span>
+}
+
+// Reset clears the counter and starts a fresh window immediately.
+func (b *Bucket) Reset() <span class="cov1" title="2">{
+        b.mu.Lock()
+        defer b.mu.Unlock()
+
+        b.count = 0
+        b.windowEnd = time.Now().Add(time.Minute)
+}</span>
+
+// Count returns the current request count in the active window (useful for tests).
+func (b *Bucket) Count() int <span class="cov1" title="1">{
+        b.mu.Lock()
+        defer b.mu.Unlock()
+        return b.count
+}</span>
+
+// -----------------------------------------------------------------------------
+// BucketStore — a thread-safe map of key → *Bucket with idle-entry cleanup.
+// -----------------------------------------------------------------------------
+
+// Store manages a collection of buckets, one per unique key.
+// Inactive buckets (window expired) are pruned on every N-th access to
+// prevent unbounded memory growth.
+type Store struct {
+        mu      sync.Mutex
+        buckets map[string]*Bucket
+        limit   int // shared limit for all buckets in this store
+        pruneAt int // prune when len(buckets) reaches this threshold
+}
+
+// NewStore creates a Store where every bucket enforces the given RPM limit.
+func NewStore(limit int) *Store <span class="cov2" title="4">{
+        return &amp;Store{
+                buckets: make(map[string]*Bucket),
+                limit:   limit,
+                pruneAt: 10_000,
+        }
+}</span>
+
+// Allow returns true if the key is within its rate limit for this window.
+func (s *Store) Allow(key string) bool <span class="cov8" title="207">{
+        s.mu.Lock()
+        b, ok := s.buckets[key]
+        if !ok </span><span class="cov5" title="23">{
+                b = New(s.limit)
+                s.buckets[key] = b
+                if len(s.buckets) &gt;= s.pruneAt </span><span class="cov0" title="0">{
+                        s.pruneExpired()
+                }</span>
+        }
+        <span class="cov8" title="207">s.mu.Unlock()
+
+        return b.Allow()</span>
+}
+
+// Reset clears the bucket for the given key.
+func (s *Store) Reset(key string) <span class="cov1" title="2">{
+        s.mu.Lock()
+        defer s.mu.Unlock()
+
+        if b, ok := s.buckets[key]; ok </span><span class="cov1" title="1">{
+                b.Reset()
+        }</span>
+}
+
+// pruneExpired removes buckets whose window has already elapsed.
+// Must be called with s.mu held.
+func (s *Store) pruneExpired() <span class="cov0" title="0">{
+        now := time.Now()
+        for key, b := range s.buckets </span><span class="cov0" title="0">{
+                b.mu.Lock()
+                expired := now.After(b.windowEnd)
+                b.mu.Unlock()
+                if expired </span><span class="cov0" title="0">{
+                        delete(s.buckets, key)
+                }</span>
+        }
+}
+</pre>
+		
+		<pre class="file" id="file2" style="display: none">// Package config provides configuration loading from environment variables.
+package config
+
+import (
+        "fmt"
+        "os"
+        "strconv"
+)
+
+// Config holds all runtime configuration for the service.
+type Config struct {
+        // GRPCAddr is the address the gRPC server listens on.
+        GRPCAddr string // default: :50051
+
+        // HTTPAddr is the address the grpc-gateway HTTP server listens on.
+        HTTPAddr string // default: :8080
+
+        // LoginRPM is the max allowed authorization attempts per minute per login (N).
+        LoginRPM int // default: 10
+
+        // PasswordRPM is the max allowed attempts per minute per password (M).
+        PasswordRPM int // default: 100
+
+        // IPRPM is the max allowed attempts per minute per IP (K).
+        IPRPM int // default: 1000
+}
+
+// New loads configuration from environment variables with sensible defaults.
+//
+// Environment variables:
+//
+//        GRPC_ADDR       — gRPC listen address     (default: :50051)
+//        HTTP_ADDR       — HTTP gateway address     (default: :8080)
+//        LIMIT_LOGIN     — max attempts/min/login   (default: 10)
+//        LIMIT_PASSWORD  — max attempts/min/passwd  (default: 100)
+//        LIMIT_IP        — max attempts/min/ip      (default: 1000)
+func New() (*Config, error) <span class="cov0" title="0">{
+        cfg := &amp;Config{
+                GRPCAddr:    envString("GRPC_ADDR", ":50051"),
+                HTTPAddr:    envString("HTTP_ADDR", ":8080"),
+                LoginRPM:    1,
+                PasswordRPM: 100,
+                IPRPM:       1000,
+        }
+
+        var err error
+
+        if cfg.LoginRPM, err = envInt("LIMIT_LOGIN", cfg.LoginRPM); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("LIMIT_LOGIN: %w", err)
+        }</span>
+        <span class="cov0" title="0">if cfg.PasswordRPM, err = envInt("LIMIT_PASSWORD", cfg.PasswordRPM); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("LIMIT_PASSWORD: %w", err)
+        }</span>
+        <span class="cov0" title="0">if cfg.IPRPM, err = envInt("LIMIT_IP", cfg.IPRPM); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("LIMIT_IP: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">if cfg.LoginRPM &lt;= 0 || cfg.PasswordRPM &lt;= 0 || cfg.IPRPM &lt;= 0 </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("rate limits must be positive (got login=%d password=%d ip=%d)",
+                        cfg.LoginRPM, cfg.PasswordRPM, cfg.IPRPM)
+        }</span>
+
+        <span class="cov0" title="0">return cfg, nil</span>
+}
+
+func envString(key, defaultVal string) string <span class="cov0" title="0">{
+        if v := os.Getenv(key); v != "" </span><span class="cov0" title="0">{
+                return v
+        }</span>
+        <span class="cov0" title="0">return defaultVal</span>
+}
+
+func envInt(key string, defaultVal int) (int, error) <span class="cov0" title="0">{
+        v := os.Getenv(key)
+        if v == "" </span><span class="cov0" title="0">{
+                return defaultVal, nil
+        }</span>
+        <span class="cov0" title="0">n, err := strconv.Atoi(v)
+        if err != nil </span><span class="cov0" title="0">{
+                return 0, fmt.Errorf("invalid integer value %q: %w", v, err)
+        }</span>
+        <span class="cov0" title="0">return n, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file3" style="display: none">// Package service implements the AntiBruteforceService gRPC interface.
+package service
+
+import (
+        "context"
+        "errors"
+
+        "go.uber.org/zap"
+        "google.golang.org/grpc/codes"
+        "google.golang.org/grpc/status"
+        "google.golang.org/protobuf/types/known/emptypb"
+
+        "github.com/whatafunc/brutego/internal/bucket"
+        "github.com/whatafunc/brutego/internal/storage"
+        pb "github.com/whatafunc/brutego/pkg/api/antibruteforce/v1"
+)
+
+// Limits holds the configured requests-per-minute thresholds.
+type Limits struct {
+        LoginRPM    int
+        PasswordRPM int
+        IPRPM       int
+}
+
+// Deps groups the external dependencies injected into Service.
+type Deps struct {
+        Logger  *zap.Logger
+        Storage storage.Storage
+        Limits  Limits
+}
+
+// Service implements pb.AntiBruteforceServiceServer.
+type Service struct {
+        pb.UnimplementedAntiBruteforceServiceServer
+
+        log     *zap.Logger
+        storage storage.Storage
+
+        loginBuckets    *bucket.Store
+        passwordBuckets *bucket.Store
+        ipBuckets       *bucket.Store
+}
+
+// New creates a fully initialised Service.
+func New(deps Deps) *Service <span class="cov0" title="0">{
+        return &amp;Service{
+                log:             deps.Logger,
+                storage:         deps.Storage,
+                loginBuckets:    bucket.NewStore(deps.Limits.LoginRPM),
+                passwordBuckets: bucket.NewStore(deps.Limits.PasswordRPM),
+                ipBuckets:       bucket.NewStore(deps.Limits.IPRPM),
+        }
+}</span>
+
+// ---------------------------------------------------------------------------
+// Authorization
+// ---------------------------------------------------------------------------
+
+// CheckAuth decides whether an authorization attempt should be allowed.
+func (s *Service) CheckAuth(_ context.Context, req *pb.CheckAuthRequest) (*pb.CheckAuthResponse, error) <span class="cov0" title="0">{
+        if err := validateCheckAuth(req); err != nil </span><span class="cov0" title="0">{
+                return nil, status.Error(codes.InvalidArgument, err.Error())
+        }</span>
+
+        // 1. Whitelist check — short-circuit allow.
+        <span class="cov0" title="0">whitelisted, err := s.storage.IsWhitelisted(req.Ip)
+        if err != nil </span><span class="cov0" title="0">{
+                s.log.Error("whitelist check failed", zap.String("ip", req.Ip), zap.Error(err))
+                return nil, status.Error(codes.Internal, "whitelist check failed")
+        }</span>
+        <span class="cov0" title="0">if whitelisted </span><span class="cov0" title="0">{
+                return &amp;pb.CheckAuthResponse{Ok: true}, nil
+        }</span>
+
+        // 2. Blacklist check — short-circuit deny.
+        <span class="cov0" title="0">blacklisted, err := s.storage.IsBlacklisted(req.Ip)
+        if err != nil </span><span class="cov0" title="0">{
+                s.log.Error("blacklist check failed", zap.String("ip", req.Ip), zap.Error(err))
+                return nil, status.Error(codes.Internal, "blacklist check failed")
+        }</span>
+        <span class="cov0" title="0">if blacklisted </span><span class="cov0" title="0">{
+                return &amp;pb.CheckAuthResponse{Ok: false}, nil
+        }</span>
+
+        // 3. Rate-limit checks — all three buckets must allow.
+        <span class="cov0" title="0">ok := s.loginBuckets.Allow(req.Login) &amp;&amp;
+                s.passwordBuckets.Allow(req.Password) &amp;&amp;
+                s.ipBuckets.Allow(req.Ip)
+
+        return &amp;pb.CheckAuthResponse{Ok: ok}, nil</span>
+}
+
+// ResetBucket clears the login and IP buckets for the given identifiers.
+func (s *Service) ResetBucket(_ context.Context, req *pb.ResetBucketRequest) (*emptypb.Empty, error) <span class="cov0" title="0">{
+        if req.Login == "" &amp;&amp; req.Ip == "" </span><span class="cov0" title="0">{
+                return nil, status.Error(codes.InvalidArgument, "login or ip must be provided")
+        }</span>
+
+        <span class="cov0" title="0">if req.Login != "" </span><span class="cov0" title="0">{
+                s.loginBuckets.Reset(req.Login)
+        }</span>
+        <span class="cov0" title="0">if req.Ip != "" </span><span class="cov0" title="0">{
+                s.ipBuckets.Reset(req.Ip)
+        }</span>
+
+        <span class="cov0" title="0">return &amp;emptypb.Empty{}, nil</span>
+}
+
+// ---------------------------------------------------------------------------
+// Blacklist
+// ---------------------------------------------------------------------------
+
+// AddToBlacklist adds a CIDR subnet to the blacklist.
+func (s *Service) AddToBlacklist(_ context.Context, req *pb.SubnetRequest) (*emptypb.Empty, error) <span class="cov0" title="0">{
+        if err := s.storage.AddToBlacklist(req.Subnet); err != nil </span><span class="cov0" title="0">{
+                return nil, subnetError(err, req.Subnet)
+        }</span>
+        <span class="cov0" title="0">return &amp;emptypb.Empty{}, nil</span>
+}
+
+// RemoveFromBlacklist removes a CIDR subnet from the blacklist.
+func (s *Service) RemoveFromBlacklist(_ context.Context, req *pb.SubnetRequest) (*emptypb.Empty, error) <span class="cov0" title="0">{
+        if err := s.storage.RemoveFromBlacklist(req.Subnet); err != nil </span><span class="cov0" title="0">{
+                return nil, subnetError(err, req.Subnet)
+        }</span>
+        <span class="cov0" title="0">return &amp;emptypb.Empty{}, nil</span>
+}
+
+// ---------------------------------------------------------------------------
+// Whitelist
+// ---------------------------------------------------------------------------
+
+// AddToWhitelist adds a CIDR subnet to the whitelist.
+func (s *Service) AddToWhitelist(_ context.Context, req *pb.SubnetRequest) (*emptypb.Empty, error) <span class="cov0" title="0">{
+        if err := s.storage.AddToWhitelist(req.Subnet); err != nil </span><span class="cov0" title="0">{
+                return nil, subnetError(err, req.Subnet)
+        }</span>
+        <span class="cov0" title="0">return &amp;emptypb.Empty{}, nil</span>
+}
+
+// RemoveFromWhitelist removes a CIDR subnet from the whitelist.
+func (s *Service) RemoveFromWhitelist(_ context.Context, req *pb.SubnetRequest) (*emptypb.Empty, error) <span class="cov0" title="0">{
+        if err := s.storage.RemoveFromWhitelist(req.Subnet); err != nil </span><span class="cov0" title="0">{
+                return nil, subnetError(err, req.Subnet)
+        }</span>
+        <span class="cov0" title="0">return &amp;emptypb.Empty{}, nil</span>
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+func validateCheckAuth(req *pb.CheckAuthRequest) error <span class="cov0" title="0">{
+        if req.Login == "" </span><span class="cov0" title="0">{
+                return errors.New("login is required")
+        }</span>
+        <span class="cov0" title="0">if req.Password == "" </span><span class="cov0" title="0">{
+                return errors.New("password is required")
+        }</span>
+        <span class="cov0" title="0">if req.Ip == "" </span><span class="cov0" title="0">{
+                return errors.New("ip is required")
+        }</span>
+        <span class="cov0" title="0">return nil</span>
+}
+
+func subnetError(err error, subnet string) error <span class="cov0" title="0">{
+        switch </span>{
+        case errors.Is(err, storage.ErrSubnetNotFound):<span class="cov0" title="0">
+                return status.Errorf(codes.NotFound, "subnet not found: %s", subnet)</span>
+        case errors.Is(err, storage.ErrInvalidSubnet):<span class="cov0" title="0">
+                return status.Errorf(codes.InvalidArgument, "invalid subnet: %s", subnet)</span>
+        default:<span class="cov0" title="0">
+                return status.Errorf(codes.Internal, "storage error: %v", err)</span>
+        }
+}
+</pre>
+		
+		<pre class="file" id="file4" style="display: none">// Package storage provides persistence for whitelist and blacklist subnets.
+package storage
+
+import (
+        "fmt"
+        "net"
+        "sync"
+)
+
+// ErrSubnetNotFound is returned when a subnet to be deleted does not exist.
+var ErrSubnetNotFound = fmt.Errorf("subnet not found")
+
+// ErrInvalidSubnet is returned when a CIDR string cannot be parsed.
+var ErrInvalidSubnet = fmt.Errorf("invalid subnet")
+
+// Storage defines the persistence contract for whitelist/blacklist management.
+type Storage interface {
+        // AddToBlacklist adds a CIDR subnet to the blacklist.
+        AddToBlacklist(subnet string) error
+
+        // RemoveFromBlacklist removes a CIDR subnet from the blacklist.
+        // Returns ErrSubnetNotFound if the subnet is not present.
+        RemoveFromBlacklist(subnet string) error
+
+        // IsBlacklisted reports whether the given IPv4 address belongs to any
+        // blacklisted subnet.
+        IsBlacklisted(ip string) (bool, error)
+
+        // AddToWhitelist adds a CIDR subnet to the whitelist.
+        AddToWhitelist(subnet string) error
+
+        // RemoveFromWhitelist removes a CIDR subnet from the whitelist.
+        // Returns ErrSubnetNotFound if the subnet is not present.
+        RemoveFromWhitelist(subnet string) error
+
+        // IsWhitelisted reports whether the given IPv4 address belongs to any
+        // whitelisted subnet.
+        IsWhitelisted(ip string) (bool, error)
+}
+
+// ---------------------------------------------------------------------------
+// In-memory implementation
+// ---------------------------------------------------------------------------
+
+// MemoryStorage is a thread-safe in-memory implementation of Storage.
+// Suitable for single-instance deployments; replace with a DB-backed
+// implementation for multi-instance setups.
+type MemoryStorage struct {
+        mu        sync.RWMutex
+        blacklist map[string]*net.IPNet // key: canonical CIDR string
+        whitelist map[string]*net.IPNet
+}
+
+// NewMemoryStorage creates an empty MemoryStorage.
+func NewMemoryStorage() *MemoryStorage <span class="cov0" title="0">{
+        return &amp;MemoryStorage{
+                blacklist: make(map[string]*net.IPNet),
+                whitelist: make(map[string]*net.IPNet),
+        }
+}</span>
+
+// AddToBlacklist adds a subnet to the blacklist.
+func (m *MemoryStorage) AddToBlacklist(subnet string) error <span class="cov0" title="0">{
+        return m.addTo(m.blacklist, subnet)
+}</span>
+
+// RemoveFromBlacklist removes a subnet from the blacklist.
+// Returns ErrSubnetNotFound if the subnet is not present.
+func (m *MemoryStorage) RemoveFromBlacklist(subnet string) error <span class="cov0" title="0">{
+        return m.removeFrom(m.blacklist, subnet)
+}</span>
+
+// IsBlacklisted checks if the given IP is blacklisted.
+func (m *MemoryStorage) IsBlacklisted(ip string) (bool, error) <span class="cov0" title="0">{
+        return m.contains(m.blacklist, ip)
+}</span>
+
+// AddToWhitelist adds a subnet to the whitelist.
+func (m *MemoryStorage) AddToWhitelist(subnet string) error <span class="cov0" title="0">{
+        return m.addTo(m.whitelist, subnet)
+}</span>
+
+// RemoveFromWhitelist removes a subnet from the whitelist.
+// Returns ErrSubnetNotFound if the subnet is not present.
+func (m *MemoryStorage) RemoveFromWhitelist(subnet string) error <span class="cov0" title="0">{
+        return m.removeFrom(m.whitelist, subnet)
+}</span>
+
+// IsWhitelisted checks if the given IP is whitelisted.
+// An IP is considered whitelisted if it belongs to any subnet in the whitelist,
+// regardless of blacklist status.
+func (m *MemoryStorage) IsWhitelisted(ip string) (bool, error) <span class="cov0" title="0">{
+        return m.contains(m.whitelist, ip)
+}</span>
+
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+
+func (m *MemoryStorage) addTo(list map[string]*net.IPNet, cidr string) error <span class="cov0" title="0">{
+        _, network, err := net.ParseCIDR(cidr)
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("%w: %s", ErrInvalidSubnet, cidr)
+        }</span>
+
+        <span class="cov0" title="0">m.mu.Lock()
+        defer m.mu.Unlock()
+
+        list[network.String()] = network
+        return nil</span>
+}
+
+func (m *MemoryStorage) removeFrom(list map[string]*net.IPNet, cidr string) error <span class="cov0" title="0">{
+        _, network, err := net.ParseCIDR(cidr)
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("%w: %s", ErrInvalidSubnet, cidr)
+        }</span>
+
+        <span class="cov0" title="0">key := network.String()
+
+        m.mu.Lock()
+        defer m.mu.Unlock()
+
+        if _, ok := list[key]; !ok </span><span class="cov0" title="0">{
+                return fmt.Errorf("%w: %s", ErrSubnetNotFound, cidr)
+        }</span>
+
+        <span class="cov0" title="0">delete(list, key)
+        return nil</span>
+}
+
+func (m *MemoryStorage) contains(list map[string]*net.IPNet, ipStr string) (bool, error) <span class="cov0" title="0">{
+        ip := net.ParseIP(ipStr)
+        if ip == nil </span><span class="cov0" title="0">{
+                return false, fmt.Errorf("invalid IP address: %s", ipStr)
+        }</span>
+
+        <span class="cov0" title="0">m.mu.RLock()
+        defer m.mu.RUnlock()
+
+        for _, network := range list </span><span class="cov0" title="0">{
+                if network.Contains(ip) </span><span class="cov0" title="0">{
+                        return true, nil
+                }</span>
+        }
+
+        <span class="cov0" title="0">return false, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file5" style="display: none">// Code generated by protoc-gen-go. DO NOT EDIT.
+// versions:
+//         protoc-gen-go v1.36.11
+//         protoc        (unknown)
+// source: antibruteforce/v1/antibruteforce.proto
+
+package antibruteforcepb
+
+import (
+        _ "google.golang.org/genproto/googleapis/api/annotations"
+        protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+        protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+        emptypb "google.golang.org/protobuf/types/known/emptypb"
+        reflect "reflect"
+        sync "sync"
+        unsafe "unsafe"
+)
+
+const (
+        // Verify that this generated code is sufficiently up-to-date.
+        _ = protoimpl.EnforceVersion(20 - protoimpl.MinVersion)
+        // Verify that runtime/protoimpl is sufficiently up-to-date.
+        _ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
+)
+
+// CheckAuthRequest carries the three dimensions used for rate limiting.
+type CheckAuthRequest struct {
+        state protoimpl.MessageState `protogen:"open.v1"`
+        // Username attempting to authenticate. Bucket key: login.
+        Login string `protobuf:"bytes,1,opt,name=login,proto3" json:"login,omitempty"`
+        // Password submitted. Counted separately to defend against reverse brute-force
+        // (many logins, same password). Never persisted.
+        Password string `protobuf:"bytes,2,opt,name=password,proto3" json:"password,omitempty"`
+        // IPv4 address of the originating client. Bucket key: ip.
+        Ip            string `protobuf:"bytes,3,opt,name=ip,proto3" json:"ip,omitempty"`
+        unknownFields protoimpl.UnknownFields
+        sizeCache     protoimpl.SizeCache
+}
+
+func (x *CheckAuthRequest) Reset() <span class="cov0" title="0">{
+        *x = CheckAuthRequest{}
+        mi := &amp;file_antibruteforce_v1_antibruteforce_proto_msgTypes[0]
+        ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+        ms.StoreMessageInfo(mi)
+}</span>
+
+func (x *CheckAuthRequest) String() string <span class="cov0" title="0">{
+        return protoimpl.X.MessageStringOf(x)
+}</span>
+
+func (*CheckAuthRequest) ProtoMessage() {<span class="cov0" title="0">}</span>
+
+func (x *CheckAuthRequest) ProtoReflect() protoreflect.Message <span class="cov0" title="0">{
+        mi := &amp;file_antibruteforce_v1_antibruteforce_proto_msgTypes[0]
+        if x != nil </span><span class="cov0" title="0">{
+                ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+                if ms.LoadMessageInfo() == nil </span><span class="cov0" title="0">{
+                        ms.StoreMessageInfo(mi)
+                }</span>
+                <span class="cov0" title="0">return ms</span>
+        }
+        <span class="cov0" title="0">return mi.MessageOf(x)</span>
+}
+
+// Deprecated: Use CheckAuthRequest.ProtoReflect.Descriptor instead.
+func (*CheckAuthRequest) Descriptor() ([]byte, []int) <span class="cov0" title="0">{
+        return file_antibruteforce_v1_antibruteforce_proto_rawDescGZIP(), []int{0}
+}</span>
+
+func (x *CheckAuthRequest) GetLogin() string <span class="cov0" title="0">{
+        if x != nil </span><span class="cov0" title="0">{
+                return x.Login
+        }</span>
+        <span class="cov0" title="0">return ""</span>
+}
+
+func (x *CheckAuthRequest) GetPassword() string <span class="cov0" title="0">{
+        if x != nil </span><span class="cov0" title="0">{
+                return x.Password
+        }</span>
+        <span class="cov0" title="0">return ""</span>
+}
+
+func (x *CheckAuthRequest) GetIp() string <span class="cov0" title="0">{
+        if x != nil </span><span class="cov0" title="0">{
+                return x.Ip
+        }</span>
+        <span class="cov0" title="0">return ""</span>
+}
+
+// CheckAuthResponse is the single-field decision returned to the caller.
+type CheckAuthResponse struct {
+        state protoimpl.MessageState `protogen:"open.v1"`
+        // true  → the attempt is within limits, allow it.
+        // false → limit exceeded or IP blacklisted, deny it.
+        Ok            bool `protobuf:"varint,1,opt,name=ok,proto3" json:"ok,omitempty"`
+        unknownFields protoimpl.UnknownFields
+        sizeCache     protoimpl.SizeCache
+}
+
+func (x *CheckAuthResponse) Reset() <span class="cov0" title="0">{
+        *x = CheckAuthResponse{}
+        mi := &amp;file_antibruteforce_v1_antibruteforce_proto_msgTypes[1]
+        ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+        ms.StoreMessageInfo(mi)
+}</span>
+
+func (x *CheckAuthResponse) String() string <span class="cov0" title="0">{
+        return protoimpl.X.MessageStringOf(x)
+}</span>
+
+func (*CheckAuthResponse) ProtoMessage() {<span class="cov0" title="0">}</span>
+
+func (x *CheckAuthResponse) ProtoReflect() protoreflect.Message <span class="cov0" title="0">{
+        mi := &amp;file_antibruteforce_v1_antibruteforce_proto_msgTypes[1]
+        if x != nil </span><span class="cov0" title="0">{
+                ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+                if ms.LoadMessageInfo() == nil </span><span class="cov0" title="0">{
+                        ms.StoreMessageInfo(mi)
+                }</span>
+                <span class="cov0" title="0">return ms</span>
+        }
+        <span class="cov0" title="0">return mi.MessageOf(x)</span>
+}
+
+// Deprecated: Use CheckAuthResponse.ProtoReflect.Descriptor instead.
+func (*CheckAuthResponse) Descriptor() ([]byte, []int) <span class="cov0" title="0">{
+        return file_antibruteforce_v1_antibruteforce_proto_rawDescGZIP(), []int{1}
+}</span>
+
+func (x *CheckAuthResponse) GetOk() bool <span class="cov0" title="0">{
+        if x != nil </span><span class="cov0" title="0">{
+                return x.Ok
+        }</span>
+        <span class="cov0" title="0">return false</span>
+}
+
+// ResetBucketRequest identifies which buckets to clear.
+type ResetBucketRequest struct {
+        state protoimpl.MessageState `protogen:"open.v1"`
+        // Login whose per-login bucket should be reset.
+        Login string `protobuf:"bytes,1,opt,name=login,proto3" json:"login,omitempty"`
+        // IP whose per-IP bucket should be reset.
+        Ip            string `protobuf:"bytes,2,opt,name=ip,proto3" json:"ip,omitempty"`
+        unknownFields protoimpl.UnknownFields
+        sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResetBucketRequest) Reset() <span class="cov0" title="0">{
+        *x = ResetBucketRequest{}
+        mi := &amp;file_antibruteforce_v1_antibruteforce_proto_msgTypes[2]
+        ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+        ms.StoreMessageInfo(mi)
+}</span>
+
+func (x *ResetBucketRequest) String() string <span class="cov0" title="0">{
+        return protoimpl.X.MessageStringOf(x)
+}</span>
+
+func (*ResetBucketRequest) ProtoMessage() {<span class="cov0" title="0">}</span>
+
+func (x *ResetBucketRequest) ProtoReflect() protoreflect.Message <span class="cov0" title="0">{
+        mi := &amp;file_antibruteforce_v1_antibruteforce_proto_msgTypes[2]
+        if x != nil </span><span class="cov0" title="0">{
+                ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+                if ms.LoadMessageInfo() == nil </span><span class="cov0" title="0">{
+                        ms.StoreMessageInfo(mi)
+                }</span>
+                <span class="cov0" title="0">return ms</span>
+        }
+        <span class="cov0" title="0">return mi.MessageOf(x)</span>
+}
+
+// Deprecated: Use ResetBucketRequest.ProtoReflect.Descriptor instead.
+func (*ResetBucketRequest) Descriptor() ([]byte, []int) <span class="cov0" title="0">{
+        return file_antibruteforce_v1_antibruteforce_proto_rawDescGZIP(), []int{2}
+}</span>
+
+func (x *ResetBucketRequest) GetLogin() string <span class="cov0" title="0">{
+        if x != nil </span><span class="cov0" title="0">{
+                return x.Login
+        }</span>
+        <span class="cov0" title="0">return ""</span>
+}
+
+func (x *ResetBucketRequest) GetIp() string <span class="cov0" title="0">{
+        if x != nil </span><span class="cov0" title="0">{
+                return x.Ip
+        }</span>
+        <span class="cov0" title="0">return ""</span>
+}
+
+// SubnetRequest carries an IPv4 CIDR subnet for whitelist/blacklist operations.
+type SubnetRequest struct {
+        state protoimpl.MessageState `protogen:"open.v1"`
+        // IPv4 subnet in CIDR notation, e.g. "192.168.10.0/24".
+        // Only IPv4 (/0 – /32) is supported.
+        Subnet        string `protobuf:"bytes,1,opt,name=subnet,proto3" json:"subnet,omitempty"`
+        unknownFields protoimpl.UnknownFields
+        sizeCache     protoimpl.SizeCache
+}
+
+func (x *SubnetRequest) Reset() <span class="cov0" title="0">{
+        *x = SubnetRequest{}
+        mi := &amp;file_antibruteforce_v1_antibruteforce_proto_msgTypes[3]
+        ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+        ms.StoreMessageInfo(mi)
+}</span>
+
+func (x *SubnetRequest) String() string <span class="cov0" title="0">{
+        return protoimpl.X.MessageStringOf(x)
+}</span>
+
+func (*SubnetRequest) ProtoMessage() {<span class="cov0" title="0">}</span>
+
+func (x *SubnetRequest) ProtoReflect() protoreflect.Message <span class="cov0" title="0">{
+        mi := &amp;file_antibruteforce_v1_antibruteforce_proto_msgTypes[3]
+        if x != nil </span><span class="cov0" title="0">{
+                ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+                if ms.LoadMessageInfo() == nil </span><span class="cov0" title="0">{
+                        ms.StoreMessageInfo(mi)
+                }</span>
+                <span class="cov0" title="0">return ms</span>
+        }
+        <span class="cov0" title="0">return mi.MessageOf(x)</span>
+}
+
+// Deprecated: Use SubnetRequest.ProtoReflect.Descriptor instead.
+func (*SubnetRequest) Descriptor() ([]byte, []int) <span class="cov0" title="0">{
+        return file_antibruteforce_v1_antibruteforce_proto_rawDescGZIP(), []int{3}
+}</span>
+
+func (x *SubnetRequest) GetSubnet() string <span class="cov0" title="0">{
+        if x != nil </span><span class="cov0" title="0">{
+                return x.Subnet
+        }</span>
+        <span class="cov0" title="0">return ""</span>
+}
+
+var File_antibruteforce_v1_antibruteforce_proto protoreflect.FileDescriptor
+
+const file_antibruteforce_v1_antibruteforce_proto_rawDesc = "" +
+        "\n" +
+        "&amp;antibruteforce/v1/antibruteforce.proto\x12\x11antibruteforce.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1bgoogle/protobuf/empty.proto\"T\n" +
+        "\x10CheckAuthRequest\x12\x14\n" +
+        "\x05login\x18\x01 \x01(\tR\x05login\x12\x1a\n" +
+        "\bpassword\x18\x02 \x01(\tR\bpassword\x12\x0e\n" +
+        "\x02ip\x18\x03 \x01(\tR\x02ip\"#\n" +
+        "\x11CheckAuthResponse\x12\x0e\n" +
+        "\x02ok\x18\x01 \x01(\bR\x02ok\":\n" +
+        "\x12ResetBucketRequest\x12\x14\n" +
+        "\x05login\x18\x01 \x01(\tR\x05login\x12\x0e\n" +
+        "\x02ip\x18\x02 \x01(\tR\x02ip\"'\n" +
+        "\rSubnetRequest\x12\x16\n" +
+        "\x06subnet\x18\x01 \x01(\tR\x06subnet2\x91\x05\n" +
+        "\x15AntiBruteforceService\x12q\n" +
+        "\tCheckAuth\x12#.antibruteforce.v1.CheckAuthRequest\x1a$.antibruteforce.v1.CheckAuthResponse\"\x19\x82\xd3\xe4\x93\x02\x13:\x01*\"\x0e/v1/auth/check\x12i\n" +
+        "\vResetBucket\x12%.antibruteforce.v1.ResetBucketRequest\x1a\x16.google.protobuf.Empty\"\x1b\x82\xd3\xe4\x93\x02\x15:\x01*\"\x10/v1/bucket/reset\x12d\n" +
+        "\x0eAddToBlacklist\x12 .antibruteforce.v1.SubnetRequest\x1a\x16.google.protobuf.Empty\"\x18\x82\xd3\xe4\x93\x02\x12:\x01*\"\r/v1/blacklist\x12f\n" +
+        "\x13RemoveFromBlacklist\x12 .antibruteforce.v1.SubnetRequest\x1a\x16.google.protobuf.Empty\"\x15\x82\xd3\xe4\x93\x02\x0f*\r/v1/blacklist\x12d\n" +
+        "\x0eAddToWhitelist\x12 .antibruteforce.v1.SubnetRequest\x1a\x16.google.protobuf.Empty\"\x18\x82\xd3\xe4\x93\x02\x12:\x01*\"\r/v1/whitelist\x12f\n" +
+        "\x13RemoveFromWhitelist\x12 .antibruteforce.v1.SubnetRequest\x1a\x16.google.protobuf.Empty\"\x15\x82\xd3\xe4\x93\x02\x0f*\r/v1/whitelistBIZGgithub.com/whatafunc/brutego/pkg/api/antibruteforce/v1;antibruteforcepbb\x06proto3"
+
+var (
+        file_antibruteforce_v1_antibruteforce_proto_rawDescOnce sync.Once
+        file_antibruteforce_v1_antibruteforce_proto_rawDescData []byte
+)
+
+func file_antibruteforce_v1_antibruteforce_proto_rawDescGZIP() []byte <span class="cov0" title="0">{
+        file_antibruteforce_v1_antibruteforce_proto_rawDescOnce.Do(func() </span><span class="cov0" title="0">{
+                file_antibruteforce_v1_antibruteforce_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_antibruteforce_v1_antibruteforce_proto_rawDesc), len(file_antibruteforce_v1_antibruteforce_proto_rawDesc)))
+        }</span>)
+        <span class="cov0" title="0">return file_antibruteforce_v1_antibruteforce_proto_rawDescData</span>
+}
+
+var file_antibruteforce_v1_antibruteforce_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_antibruteforce_v1_antibruteforce_proto_goTypes = []any{
+        (*CheckAuthRequest)(nil),   // 0: antibruteforce.v1.CheckAuthRequest
+        (*CheckAuthResponse)(nil),  // 1: antibruteforce.v1.CheckAuthResponse
+        (*ResetBucketRequest)(nil), // 2: antibruteforce.v1.ResetBucketRequest
+        (*SubnetRequest)(nil),      // 3: antibruteforce.v1.SubnetRequest
+        (*emptypb.Empty)(nil),      // 4: google.protobuf.Empty
+}
+var file_antibruteforce_v1_antibruteforce_proto_depIdxs = []int32{
+        0, // 0: antibruteforce.v1.AntiBruteforceService.CheckAuth:input_type -&gt; antibruteforce.v1.CheckAuthRequest
+        2, // 1: antibruteforce.v1.AntiBruteforceService.ResetBucket:input_type -&gt; antibruteforce.v1.ResetBucketRequest
+        3, // 2: antibruteforce.v1.AntiBruteforceService.AddToBlacklist:input_type -&gt; antibruteforce.v1.SubnetRequest
+        3, // 3: antibruteforce.v1.AntiBruteforceService.RemoveFromBlacklist:input_type -&gt; antibruteforce.v1.SubnetRequest
+        3, // 4: antibruteforce.v1.AntiBruteforceService.AddToWhitelist:input_type -&gt; antibruteforce.v1.SubnetRequest
+        3, // 5: antibruteforce.v1.AntiBruteforceService.RemoveFromWhitelist:input_type -&gt; antibruteforce.v1.SubnetRequest
+        1, // 6: antibruteforce.v1.AntiBruteforceService.CheckAuth:output_type -&gt; antibruteforce.v1.CheckAuthResponse
+        4, // 7: antibruteforce.v1.AntiBruteforceService.ResetBucket:output_type -&gt; google.protobuf.Empty
+        4, // 8: antibruteforce.v1.AntiBruteforceService.AddToBlacklist:output_type -&gt; google.protobuf.Empty
+        4, // 9: antibruteforce.v1.AntiBruteforceService.RemoveFromBlacklist:output_type -&gt; google.protobuf.Empty
+        4, // 10: antibruteforce.v1.AntiBruteforceService.AddToWhitelist:output_type -&gt; google.protobuf.Empty
+        4, // 11: antibruteforce.v1.AntiBruteforceService.RemoveFromWhitelist:output_type -&gt; google.protobuf.Empty
+        6, // [6:12] is the sub-list for method output_type
+        0, // [0:6] is the sub-list for method input_type
+        0, // [0:0] is the sub-list for extension type_name
+        0, // [0:0] is the sub-list for extension extendee
+        0, // [0:0] is the sub-list for field type_name
+}
+
+func init() <span class="cov0" title="0">{ file_antibruteforce_v1_antibruteforce_proto_init() }</span>
+func file_antibruteforce_v1_antibruteforce_proto_init() <span class="cov0" title="0">{
+        if File_antibruteforce_v1_antibruteforce_proto != nil </span><span class="cov0" title="0">{
+                return
+        }</span>
+        <span class="cov0" title="0">type x struct{}
+        out := protoimpl.TypeBuilder{
+                File: protoimpl.DescBuilder{
+                        GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
+                        RawDescriptor: unsafe.Slice(unsafe.StringData(file_antibruteforce_v1_antibruteforce_proto_rawDesc), len(file_antibruteforce_v1_antibruteforce_proto_rawDesc)),
+                        NumEnums:      0,
+                        NumMessages:   4,
+                        NumExtensions: 0,
+                        NumServices:   1,
+                },
+                GoTypes:           file_antibruteforce_v1_antibruteforce_proto_goTypes,
+                DependencyIndexes: file_antibruteforce_v1_antibruteforce_proto_depIdxs,
+                MessageInfos:      file_antibruteforce_v1_antibruteforce_proto_msgTypes,
+        }.Build()
+        File_antibruteforce_v1_antibruteforce_proto = out.File
+        file_antibruteforce_v1_antibruteforce_proto_goTypes = nil
+        file_antibruteforce_v1_antibruteforce_proto_depIdxs = nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file6" style="display: none">// Code generated by protoc-gen-grpc-gateway. DO NOT EDIT.
+// source: antibruteforce/v1/antibruteforce.proto
+
+/*
+Package antibruteforcepb is a reverse proxy.
+
+It translates gRPC into RESTful JSON APIs.
+*/
+package antibruteforcepb
+
+import (
+        "context"
+        "errors"
+        "io"
+        "net/http"
+
+        "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+        "github.com/grpc-ecosystem/grpc-gateway/v2/utilities"
+        "google.golang.org/grpc"
+        "google.golang.org/grpc/codes"
+        "google.golang.org/grpc/grpclog"
+        "google.golang.org/grpc/metadata"
+        "google.golang.org/grpc/status"
+        "google.golang.org/protobuf/proto"
+)
+
+// Suppress "imported and not used" errors
+var (
+        _ codes.Code
+        _ io.Reader
+        _ status.Status
+        _ = errors.New
+        _ = runtime.String
+        _ = utilities.NewDoubleArray
+        _ = metadata.Join
+)
+
+func request_AntiBruteforceService_CheckAuth_0(ctx context.Context, marshaler runtime.Marshaler, client AntiBruteforceServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) <span class="cov0" title="0">{
+        var (
+                protoReq CheckAuthRequest
+                metadata runtime.ServerMetadata
+        )
+        if err := marshaler.NewDecoder(req.Body).Decode(&amp;protoReq); err != nil &amp;&amp; !errors.Is(err, io.EOF) </span><span class="cov0" title="0">{
+                return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+        }</span>
+        <span class="cov0" title="0">if req.Body != nil </span><span class="cov0" title="0">{
+                _, _ = io.Copy(io.Discard, req.Body)
+        }</span>
+        <span class="cov0" title="0">msg, err := client.CheckAuth(ctx, &amp;protoReq, grpc.Header(&amp;metadata.HeaderMD), grpc.Trailer(&amp;metadata.TrailerMD))
+        return msg, metadata, err</span>
+}
+
+func local_request_AntiBruteforceService_CheckAuth_0(ctx context.Context, marshaler runtime.Marshaler, server AntiBruteforceServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) <span class="cov0" title="0">{
+        var (
+                protoReq CheckAuthRequest
+                metadata runtime.ServerMetadata
+        )
+        if err := marshaler.NewDecoder(req.Body).Decode(&amp;protoReq); err != nil &amp;&amp; !errors.Is(err, io.EOF) </span><span class="cov0" title="0">{
+                return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+        }</span>
+        <span class="cov0" title="0">msg, err := server.CheckAuth(ctx, &amp;protoReq)
+        return msg, metadata, err</span>
+}
+
+func request_AntiBruteforceService_ResetBucket_0(ctx context.Context, marshaler runtime.Marshaler, client AntiBruteforceServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) <span class="cov0" title="0">{
+        var (
+                protoReq ResetBucketRequest
+                metadata runtime.ServerMetadata
+        )
+        if err := marshaler.NewDecoder(req.Body).Decode(&amp;protoReq); err != nil &amp;&amp; !errors.Is(err, io.EOF) </span><span class="cov0" title="0">{
+                return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+        }</span>
+        <span class="cov0" title="0">if req.Body != nil </span><span class="cov0" title="0">{
+                _, _ = io.Copy(io.Discard, req.Body)
+        }</span>
+        <span class="cov0" title="0">msg, err := client.ResetBucket(ctx, &amp;protoReq, grpc.Header(&amp;metadata.HeaderMD), grpc.Trailer(&amp;metadata.TrailerMD))
+        return msg, metadata, err</span>
+}
+
+func local_request_AntiBruteforceService_ResetBucket_0(ctx context.Context, marshaler runtime.Marshaler, server AntiBruteforceServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) <span class="cov0" title="0">{
+        var (
+                protoReq ResetBucketRequest
+                metadata runtime.ServerMetadata
+        )
+        if err := marshaler.NewDecoder(req.Body).Decode(&amp;protoReq); err != nil &amp;&amp; !errors.Is(err, io.EOF) </span><span class="cov0" title="0">{
+                return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+        }</span>
+        <span class="cov0" title="0">msg, err := server.ResetBucket(ctx, &amp;protoReq)
+        return msg, metadata, err</span>
+}
+
+func request_AntiBruteforceService_AddToBlacklist_0(ctx context.Context, marshaler runtime.Marshaler, client AntiBruteforceServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) <span class="cov0" title="0">{
+        var (
+                protoReq SubnetRequest
+                metadata runtime.ServerMetadata
+        )
+        if err := marshaler.NewDecoder(req.Body).Decode(&amp;protoReq); err != nil &amp;&amp; !errors.Is(err, io.EOF) </span><span class="cov0" title="0">{
+                return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+        }</span>
+        <span class="cov0" title="0">if req.Body != nil </span><span class="cov0" title="0">{
+                _, _ = io.Copy(io.Discard, req.Body)
+        }</span>
+        <span class="cov0" title="0">msg, err := client.AddToBlacklist(ctx, &amp;protoReq, grpc.Header(&amp;metadata.HeaderMD), grpc.Trailer(&amp;metadata.TrailerMD))
+        return msg, metadata, err</span>
+}
+
+func local_request_AntiBruteforceService_AddToBlacklist_0(ctx context.Context, marshaler runtime.Marshaler, server AntiBruteforceServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) <span class="cov0" title="0">{
+        var (
+                protoReq SubnetRequest
+                metadata runtime.ServerMetadata
+        )
+        if err := marshaler.NewDecoder(req.Body).Decode(&amp;protoReq); err != nil &amp;&amp; !errors.Is(err, io.EOF) </span><span class="cov0" title="0">{
+                return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+        }</span>
+        <span class="cov0" title="0">msg, err := server.AddToBlacklist(ctx, &amp;protoReq)
+        return msg, metadata, err</span>
+}
+
+var filter_AntiBruteforceService_RemoveFromBlacklist_0 = &amp;utilities.DoubleArray{Encoding: map[string]int{}, Base: []int(nil), Check: []int(nil)}
+
+func request_AntiBruteforceService_RemoveFromBlacklist_0(ctx context.Context, marshaler runtime.Marshaler, client AntiBruteforceServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) <span class="cov0" title="0">{
+        var (
+                protoReq SubnetRequest
+                metadata runtime.ServerMetadata
+        )
+        if req.Body != nil </span><span class="cov0" title="0">{
+                _, _ = io.Copy(io.Discard, req.Body)
+        }</span>
+        <span class="cov0" title="0">if err := req.ParseForm(); err != nil </span><span class="cov0" title="0">{
+                return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+        }</span>
+        <span class="cov0" title="0">if err := runtime.PopulateQueryParameters(&amp;protoReq, req.Form, filter_AntiBruteforceService_RemoveFromBlacklist_0); err != nil </span><span class="cov0" title="0">{
+                return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+        }</span>
+        <span class="cov0" title="0">msg, err := client.RemoveFromBlacklist(ctx, &amp;protoReq, grpc.Header(&amp;metadata.HeaderMD), grpc.Trailer(&amp;metadata.TrailerMD))
+        return msg, metadata, err</span>
+}
+
+func local_request_AntiBruteforceService_RemoveFromBlacklist_0(ctx context.Context, marshaler runtime.Marshaler, server AntiBruteforceServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) <span class="cov0" title="0">{
+        var (
+                protoReq SubnetRequest
+                metadata runtime.ServerMetadata
+        )
+        if err := req.ParseForm(); err != nil </span><span class="cov0" title="0">{
+                return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+        }</span>
+        <span class="cov0" title="0">if err := runtime.PopulateQueryParameters(&amp;protoReq, req.Form, filter_AntiBruteforceService_RemoveFromBlacklist_0); err != nil </span><span class="cov0" title="0">{
+                return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+        }</span>
+        <span class="cov0" title="0">msg, err := server.RemoveFromBlacklist(ctx, &amp;protoReq)
+        return msg, metadata, err</span>
+}
+
+func request_AntiBruteforceService_AddToWhitelist_0(ctx context.Context, marshaler runtime.Marshaler, client AntiBruteforceServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) <span class="cov0" title="0">{
+        var (
+                protoReq SubnetRequest
+                metadata runtime.ServerMetadata
+        )
+        if err := marshaler.NewDecoder(req.Body).Decode(&amp;protoReq); err != nil &amp;&amp; !errors.Is(err, io.EOF) </span><span class="cov0" title="0">{
+                return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+        }</span>
+        <span class="cov0" title="0">if req.Body != nil </span><span class="cov0" title="0">{
+                _, _ = io.Copy(io.Discard, req.Body)
+        }</span>
+        <span class="cov0" title="0">msg, err := client.AddToWhitelist(ctx, &amp;protoReq, grpc.Header(&amp;metadata.HeaderMD), grpc.Trailer(&amp;metadata.TrailerMD))
+        return msg, metadata, err</span>
+}
+
+func local_request_AntiBruteforceService_AddToWhitelist_0(ctx context.Context, marshaler runtime.Marshaler, server AntiBruteforceServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) <span class="cov0" title="0">{
+        var (
+                protoReq SubnetRequest
+                metadata runtime.ServerMetadata
+        )
+        if err := marshaler.NewDecoder(req.Body).Decode(&amp;protoReq); err != nil &amp;&amp; !errors.Is(err, io.EOF) </span><span class="cov0" title="0">{
+                return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+        }</span>
+        <span class="cov0" title="0">msg, err := server.AddToWhitelist(ctx, &amp;protoReq)
+        return msg, metadata, err</span>
+}
+
+var filter_AntiBruteforceService_RemoveFromWhitelist_0 = &amp;utilities.DoubleArray{Encoding: map[string]int{}, Base: []int(nil), Check: []int(nil)}
+
+func request_AntiBruteforceService_RemoveFromWhitelist_0(ctx context.Context, marshaler runtime.Marshaler, client AntiBruteforceServiceClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) <span class="cov0" title="0">{
+        var (
+                protoReq SubnetRequest
+                metadata runtime.ServerMetadata
+        )
+        if req.Body != nil </span><span class="cov0" title="0">{
+                _, _ = io.Copy(io.Discard, req.Body)
+        }</span>
+        <span class="cov0" title="0">if err := req.ParseForm(); err != nil </span><span class="cov0" title="0">{
+                return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+        }</span>
+        <span class="cov0" title="0">if err := runtime.PopulateQueryParameters(&amp;protoReq, req.Form, filter_AntiBruteforceService_RemoveFromWhitelist_0); err != nil </span><span class="cov0" title="0">{
+                return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+        }</span>
+        <span class="cov0" title="0">msg, err := client.RemoveFromWhitelist(ctx, &amp;protoReq, grpc.Header(&amp;metadata.HeaderMD), grpc.Trailer(&amp;metadata.TrailerMD))
+        return msg, metadata, err</span>
+}
+
+func local_request_AntiBruteforceService_RemoveFromWhitelist_0(ctx context.Context, marshaler runtime.Marshaler, server AntiBruteforceServiceServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) <span class="cov0" title="0">{
+        var (
+                protoReq SubnetRequest
+                metadata runtime.ServerMetadata
+        )
+        if err := req.ParseForm(); err != nil </span><span class="cov0" title="0">{
+                return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+        }</span>
+        <span class="cov0" title="0">if err := runtime.PopulateQueryParameters(&amp;protoReq, req.Form, filter_AntiBruteforceService_RemoveFromWhitelist_0); err != nil </span><span class="cov0" title="0">{
+                return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+        }</span>
+        <span class="cov0" title="0">msg, err := server.RemoveFromWhitelist(ctx, &amp;protoReq)
+        return msg, metadata, err</span>
+}
+
+// RegisterAntiBruteforceServiceHandlerServer registers the http handlers for service AntiBruteforceService to "mux".
+// UnaryRPC     :call AntiBruteforceServiceServer directly.
+// StreamingRPC :currently unsupported pending https://github.com/grpc/grpc-go/issues/906.
+// Note that using this registration option will cause many gRPC library features to stop working. Consider using RegisterAntiBruteforceServiceHandlerFromEndpoint instead.
+// GRPC interceptors will not work for this type of registration. To use interceptors, you must use the "runtime.WithMiddlewares" option in the "runtime.NewServeMux" call.
+func RegisterAntiBruteforceServiceHandlerServer(ctx context.Context, mux *runtime.ServeMux, server AntiBruteforceServiceServer) error <span class="cov0" title="0">{
+        mux.Handle(http.MethodPost, pattern_AntiBruteforceService_CheckAuth_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) </span><span class="cov0" title="0">{
+                ctx, cancel := context.WithCancel(req.Context())
+                defer cancel()
+                var stream runtime.ServerTransportStream
+                ctx = grpc.NewContextWithServerTransportStream(ctx, &amp;stream)
+                inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+                annotatedContext, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/antibruteforce.v1.AntiBruteforceService/CheckAuth", runtime.WithHTTPPathPattern("/v1/auth/check"))
+                if err != nil </span><span class="cov0" title="0">{
+                        runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+                        return
+                }</span>
+                <span class="cov0" title="0">resp, md, err := local_request_AntiBruteforceService_CheckAuth_0(annotatedContext, inboundMarshaler, server, req, pathParams)
+                md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
+                annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+                if err != nil </span><span class="cov0" title="0">{
+                        runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+                        return
+                }</span>
+                <span class="cov0" title="0">forward_AntiBruteforceService_CheckAuth_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)</span>
+        })
+        <span class="cov0" title="0">mux.Handle(http.MethodPost, pattern_AntiBruteforceService_ResetBucket_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) </span><span class="cov0" title="0">{
+                ctx, cancel := context.WithCancel(req.Context())
+                defer cancel()
+                var stream runtime.ServerTransportStream
+                ctx = grpc.NewContextWithServerTransportStream(ctx, &amp;stream)
+                inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+                annotatedContext, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/antibruteforce.v1.AntiBruteforceService/ResetBucket", runtime.WithHTTPPathPattern("/v1/bucket/reset"))
+                if err != nil </span><span class="cov0" title="0">{
+                        runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+                        return
+                }</span>
+                <span class="cov0" title="0">resp, md, err := local_request_AntiBruteforceService_ResetBucket_0(annotatedContext, inboundMarshaler, server, req, pathParams)
+                md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
+                annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+                if err != nil </span><span class="cov0" title="0">{
+                        runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+                        return
+                }</span>
+                <span class="cov0" title="0">forward_AntiBruteforceService_ResetBucket_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)</span>
+        })
+        <span class="cov0" title="0">mux.Handle(http.MethodPost, pattern_AntiBruteforceService_AddToBlacklist_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) </span><span class="cov0" title="0">{
+                ctx, cancel := context.WithCancel(req.Context())
+                defer cancel()
+                var stream runtime.ServerTransportStream
+                ctx = grpc.NewContextWithServerTransportStream(ctx, &amp;stream)
+                inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+                annotatedContext, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/antibruteforce.v1.AntiBruteforceService/AddToBlacklist", runtime.WithHTTPPathPattern("/v1/blacklist"))
+                if err != nil </span><span class="cov0" title="0">{
+                        runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+                        return
+                }</span>
+                <span class="cov0" title="0">resp, md, err := local_request_AntiBruteforceService_AddToBlacklist_0(annotatedContext, inboundMarshaler, server, req, pathParams)
+                md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
+                annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+                if err != nil </span><span class="cov0" title="0">{
+                        runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+                        return
+                }</span>
+                <span class="cov0" title="0">forward_AntiBruteforceService_AddToBlacklist_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)</span>
+        })
+        <span class="cov0" title="0">mux.Handle(http.MethodDelete, pattern_AntiBruteforceService_RemoveFromBlacklist_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) </span><span class="cov0" title="0">{
+                ctx, cancel := context.WithCancel(req.Context())
+                defer cancel()
+                var stream runtime.ServerTransportStream
+                ctx = grpc.NewContextWithServerTransportStream(ctx, &amp;stream)
+                inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+                annotatedContext, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/antibruteforce.v1.AntiBruteforceService/RemoveFromBlacklist", runtime.WithHTTPPathPattern("/v1/blacklist"))
+                if err != nil </span><span class="cov0" title="0">{
+                        runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+                        return
+                }</span>
+                <span class="cov0" title="0">resp, md, err := local_request_AntiBruteforceService_RemoveFromBlacklist_0(annotatedContext, inboundMarshaler, server, req, pathParams)
+                md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
+                annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+                if err != nil </span><span class="cov0" title="0">{
+                        runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+                        return
+                }</span>
+                <span class="cov0" title="0">forward_AntiBruteforceService_RemoveFromBlacklist_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)</span>
+        })
+        <span class="cov0" title="0">mux.Handle(http.MethodPost, pattern_AntiBruteforceService_AddToWhitelist_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) </span><span class="cov0" title="0">{
+                ctx, cancel := context.WithCancel(req.Context())
+                defer cancel()
+                var stream runtime.ServerTransportStream
+                ctx = grpc.NewContextWithServerTransportStream(ctx, &amp;stream)
+                inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+                annotatedContext, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/antibruteforce.v1.AntiBruteforceService/AddToWhitelist", runtime.WithHTTPPathPattern("/v1/whitelist"))
+                if err != nil </span><span class="cov0" title="0">{
+                        runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+                        return
+                }</span>
+                <span class="cov0" title="0">resp, md, err := local_request_AntiBruteforceService_AddToWhitelist_0(annotatedContext, inboundMarshaler, server, req, pathParams)
+                md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
+                annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+                if err != nil </span><span class="cov0" title="0">{
+                        runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+                        return
+                }</span>
+                <span class="cov0" title="0">forward_AntiBruteforceService_AddToWhitelist_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)</span>
+        })
+        <span class="cov0" title="0">mux.Handle(http.MethodDelete, pattern_AntiBruteforceService_RemoveFromWhitelist_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) </span><span class="cov0" title="0">{
+                ctx, cancel := context.WithCancel(req.Context())
+                defer cancel()
+                var stream runtime.ServerTransportStream
+                ctx = grpc.NewContextWithServerTransportStream(ctx, &amp;stream)
+                inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+                annotatedContext, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/antibruteforce.v1.AntiBruteforceService/RemoveFromWhitelist", runtime.WithHTTPPathPattern("/v1/whitelist"))
+                if err != nil </span><span class="cov0" title="0">{
+                        runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+                        return
+                }</span>
+                <span class="cov0" title="0">resp, md, err := local_request_AntiBruteforceService_RemoveFromWhitelist_0(annotatedContext, inboundMarshaler, server, req, pathParams)
+                md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
+                annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+                if err != nil </span><span class="cov0" title="0">{
+                        runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+                        return
+                }</span>
+                <span class="cov0" title="0">forward_AntiBruteforceService_RemoveFromWhitelist_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)</span>
+        })
+
+        <span class="cov0" title="0">return nil</span>
+}
+
+// RegisterAntiBruteforceServiceHandlerFromEndpoint is same as RegisterAntiBruteforceServiceHandler but
+// automatically dials to "endpoint" and closes the connection when "ctx" gets done.
+func RegisterAntiBruteforceServiceHandlerFromEndpoint(ctx context.Context, mux *runtime.ServeMux, endpoint string, opts []grpc.DialOption) (err error) <span class="cov0" title="0">{
+        conn, err := grpc.NewClient(endpoint, opts...)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov0" title="0">defer func() </span><span class="cov0" title="0">{
+                if err != nil </span><span class="cov0" title="0">{
+                        if cerr := conn.Close(); cerr != nil </span><span class="cov0" title="0">{
+                                grpclog.Errorf("Failed to close conn to %s: %v", endpoint, cerr)
+                        }</span>
+                        <span class="cov0" title="0">return</span>
+                }
+                <span class="cov0" title="0">go func() </span><span class="cov0" title="0">{
+                        &lt;-ctx.Done()
+                        if cerr := conn.Close(); cerr != nil </span><span class="cov0" title="0">{
+                                grpclog.Errorf("Failed to close conn to %s: %v", endpoint, cerr)
+                        }</span>
+                }()
+        }()
+        <span class="cov0" title="0">return RegisterAntiBruteforceServiceHandler(ctx, mux, conn)</span>
+}
+
+// RegisterAntiBruteforceServiceHandler registers the http handlers for service AntiBruteforceService to "mux".
+// The handlers forward requests to the grpc endpoint over "conn".
+func RegisterAntiBruteforceServiceHandler(ctx context.Context, mux *runtime.ServeMux, conn *grpc.ClientConn) error <span class="cov0" title="0">{
+        return RegisterAntiBruteforceServiceHandlerClient(ctx, mux, NewAntiBruteforceServiceClient(conn))
+}</span>
+
+// RegisterAntiBruteforceServiceHandlerClient registers the http handlers for service AntiBruteforceService
+// to "mux". The handlers forward requests to the grpc endpoint over the given implementation of "AntiBruteforceServiceClient".
+// Note: the gRPC framework executes interceptors within the gRPC handler. If the passed in "AntiBruteforceServiceClient"
+// doesn't go through the normal gRPC flow (creating a gRPC client etc.) then it will be up to the passed in
+// "AntiBruteforceServiceClient" to call the correct interceptors. This client ignores the HTTP middlewares.
+func RegisterAntiBruteforceServiceHandlerClient(ctx context.Context, mux *runtime.ServeMux, client AntiBruteforceServiceClient) error <span class="cov0" title="0">{
+        mux.Handle(http.MethodPost, pattern_AntiBruteforceService_CheckAuth_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) </span><span class="cov0" title="0">{
+                ctx, cancel := context.WithCancel(req.Context())
+                defer cancel()
+                inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+                annotatedContext, err := runtime.AnnotateContext(ctx, mux, req, "/antibruteforce.v1.AntiBruteforceService/CheckAuth", runtime.WithHTTPPathPattern("/v1/auth/check"))
+                if err != nil </span><span class="cov0" title="0">{
+                        runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+                        return
+                }</span>
+                <span class="cov0" title="0">resp, md, err := request_AntiBruteforceService_CheckAuth_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+                annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+                if err != nil </span><span class="cov0" title="0">{
+                        runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+                        return
+                }</span>
+                <span class="cov0" title="0">forward_AntiBruteforceService_CheckAuth_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)</span>
+        })
+        <span class="cov0" title="0">mux.Handle(http.MethodPost, pattern_AntiBruteforceService_ResetBucket_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) </span><span class="cov0" title="0">{
+                ctx, cancel := context.WithCancel(req.Context())
+                defer cancel()
+                inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+                annotatedContext, err := runtime.AnnotateContext(ctx, mux, req, "/antibruteforce.v1.AntiBruteforceService/ResetBucket", runtime.WithHTTPPathPattern("/v1/bucket/reset"))
+                if err != nil </span><span class="cov0" title="0">{
+                        runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+                        return
+                }</span>
+                <span class="cov0" title="0">resp, md, err := request_AntiBruteforceService_ResetBucket_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+                annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+                if err != nil </span><span class="cov0" title="0">{
+                        runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+                        return
+                }</span>
+                <span class="cov0" title="0">forward_AntiBruteforceService_ResetBucket_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)</span>
+        })
+        <span class="cov0" title="0">mux.Handle(http.MethodPost, pattern_AntiBruteforceService_AddToBlacklist_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) </span><span class="cov0" title="0">{
+                ctx, cancel := context.WithCancel(req.Context())
+                defer cancel()
+                inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+                annotatedContext, err := runtime.AnnotateContext(ctx, mux, req, "/antibruteforce.v1.AntiBruteforceService/AddToBlacklist", runtime.WithHTTPPathPattern("/v1/blacklist"))
+                if err != nil </span><span class="cov0" title="0">{
+                        runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+                        return
+                }</span>
+                <span class="cov0" title="0">resp, md, err := request_AntiBruteforceService_AddToBlacklist_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+                annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+                if err != nil </span><span class="cov0" title="0">{
+                        runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+                        return
+                }</span>
+                <span class="cov0" title="0">forward_AntiBruteforceService_AddToBlacklist_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)</span>
+        })
+        <span class="cov0" title="0">mux.Handle(http.MethodDelete, pattern_AntiBruteforceService_RemoveFromBlacklist_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) </span><span class="cov0" title="0">{
+                ctx, cancel := context.WithCancel(req.Context())
+                defer cancel()
+                inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+                annotatedContext, err := runtime.AnnotateContext(ctx, mux, req, "/antibruteforce.v1.AntiBruteforceService/RemoveFromBlacklist", runtime.WithHTTPPathPattern("/v1/blacklist"))
+                if err != nil </span><span class="cov0" title="0">{
+                        runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+                        return
+                }</span>
+                <span class="cov0" title="0">resp, md, err := request_AntiBruteforceService_RemoveFromBlacklist_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+                annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+                if err != nil </span><span class="cov0" title="0">{
+                        runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+                        return
+                }</span>
+                <span class="cov0" title="0">forward_AntiBruteforceService_RemoveFromBlacklist_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)</span>
+        })
+        <span class="cov0" title="0">mux.Handle(http.MethodPost, pattern_AntiBruteforceService_AddToWhitelist_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) </span><span class="cov0" title="0">{
+                ctx, cancel := context.WithCancel(req.Context())
+                defer cancel()
+                inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+                annotatedContext, err := runtime.AnnotateContext(ctx, mux, req, "/antibruteforce.v1.AntiBruteforceService/AddToWhitelist", runtime.WithHTTPPathPattern("/v1/whitelist"))
+                if err != nil </span><span class="cov0" title="0">{
+                        runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+                        return
+                }</span>
+                <span class="cov0" title="0">resp, md, err := request_AntiBruteforceService_AddToWhitelist_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+                annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+                if err != nil </span><span class="cov0" title="0">{
+                        runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+                        return
+                }</span>
+                <span class="cov0" title="0">forward_AntiBruteforceService_AddToWhitelist_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)</span>
+        })
+        <span class="cov0" title="0">mux.Handle(http.MethodDelete, pattern_AntiBruteforceService_RemoveFromWhitelist_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) </span><span class="cov0" title="0">{
+                ctx, cancel := context.WithCancel(req.Context())
+                defer cancel()
+                inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+                annotatedContext, err := runtime.AnnotateContext(ctx, mux, req, "/antibruteforce.v1.AntiBruteforceService/RemoveFromWhitelist", runtime.WithHTTPPathPattern("/v1/whitelist"))
+                if err != nil </span><span class="cov0" title="0">{
+                        runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+                        return
+                }</span>
+                <span class="cov0" title="0">resp, md, err := request_AntiBruteforceService_RemoveFromWhitelist_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+                annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+                if err != nil </span><span class="cov0" title="0">{
+                        runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+                        return
+                }</span>
+                <span class="cov0" title="0">forward_AntiBruteforceService_RemoveFromWhitelist_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)</span>
+        })
+        <span class="cov0" title="0">return nil</span>
+}
+
+var (
+        pattern_AntiBruteforceService_CheckAuth_0           = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"v1", "auth", "check"}, ""))
+        pattern_AntiBruteforceService_ResetBucket_0         = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"v1", "bucket", "reset"}, ""))
+        pattern_AntiBruteforceService_AddToBlacklist_0      = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "blacklist"}, ""))
+        pattern_AntiBruteforceService_RemoveFromBlacklist_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "blacklist"}, ""))
+        pattern_AntiBruteforceService_AddToWhitelist_0      = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "whitelist"}, ""))
+        pattern_AntiBruteforceService_RemoveFromWhitelist_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"v1", "whitelist"}, ""))
+)
+
+var (
+        forward_AntiBruteforceService_CheckAuth_0           = runtime.ForwardResponseMessage
+        forward_AntiBruteforceService_ResetBucket_0         = runtime.ForwardResponseMessage
+        forward_AntiBruteforceService_AddToBlacklist_0      = runtime.ForwardResponseMessage
+        forward_AntiBruteforceService_RemoveFromBlacklist_0 = runtime.ForwardResponseMessage
+        forward_AntiBruteforceService_AddToWhitelist_0      = runtime.ForwardResponseMessage
+        forward_AntiBruteforceService_RemoveFromWhitelist_0 = runtime.ForwardResponseMessage
+)
+</pre>
+		
+		<pre class="file" id="file7" style="display: none">// Code generated by protoc-gen-go-grpc. DO NOT EDIT.
+// versions:
+// - protoc-gen-go-grpc v1.6.1
+// - protoc             (unknown)
+// source: antibruteforce/v1/antibruteforce.proto
+
+package antibruteforcepb
+
+import (
+        context "context"
+        grpc "google.golang.org/grpc"
+        codes "google.golang.org/grpc/codes"
+        status "google.golang.org/grpc/status"
+        emptypb "google.golang.org/protobuf/types/known/emptypb"
+)
+
+// This is a compile-time assertion to ensure that this generated file
+// is compatible with the grpc package it is being compiled against.
+// Requires gRPC-Go v1.64.0 or later.
+const _ = grpc.SupportPackageIsVersion9
+
+const (
+        AntiBruteforceService_CheckAuth_FullMethodName           = "/antibruteforce.v1.AntiBruteforceService/CheckAuth"
+        AntiBruteforceService_ResetBucket_FullMethodName         = "/antibruteforce.v1.AntiBruteforceService/ResetBucket"
+        AntiBruteforceService_AddToBlacklist_FullMethodName      = "/antibruteforce.v1.AntiBruteforceService/AddToBlacklist"
+        AntiBruteforceService_RemoveFromBlacklist_FullMethodName = "/antibruteforce.v1.AntiBruteforceService/RemoveFromBlacklist"
+        AntiBruteforceService_AddToWhitelist_FullMethodName      = "/antibruteforce.v1.AntiBruteforceService/AddToWhitelist"
+        AntiBruteforceService_RemoveFromWhitelist_FullMethodName = "/antibruteforce.v1.AntiBruteforceService/RemoveFromWhitelist"
+)
+
+// AntiBruteforceServiceClient is the client API for AntiBruteforceService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type AntiBruteforceServiceClient interface {
+        // CheckAuth decides whether an authorization attempt should be allowed.
+        // Returns ok=true  → allow
+        //
+        //        ok=false → deny (rate limit exceeded or IP is blacklisted)
+        //        ok=true  → always allow when IP is whitelisted (short-circuits limits)
+        CheckAuth(ctx context.Context, in *CheckAuthRequest, opts ...grpc.CallOption) (*CheckAuthResponse, error)
+        // ResetBucket clears the leaky-bucket counters for a given login and IP.
+        // Useful for manual unblocking (typically called from the CLI tool).
+        ResetBucket(ctx context.Context, in *ResetBucketRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+        // AddToBlacklist registers a CIDR subnet whose IPs will be unconditionally denied.
+        AddToBlacklist(ctx context.Context, in *SubnetRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+        // RemoveFromBlacklist deregisters a previously added blacklist subnet.
+        RemoveFromBlacklist(ctx context.Context, in *SubnetRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+        // AddToWhitelist registers a CIDR subnet whose IPs bypass all rate-limit checks.
+        AddToWhitelist(ctx context.Context, in *SubnetRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+        // RemoveFromWhitelist deregisters a previously added whitelist subnet.
+        RemoveFromWhitelist(ctx context.Context, in *SubnetRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+}
+
+type antiBruteforceServiceClient struct {
+        cc grpc.ClientConnInterface
+}
+
+func NewAntiBruteforceServiceClient(cc grpc.ClientConnInterface) AntiBruteforceServiceClient <span class="cov0" title="0">{
+        return &amp;antiBruteforceServiceClient{cc}
+}</span>
+
+func (c *antiBruteforceServiceClient) CheckAuth(ctx context.Context, in *CheckAuthRequest, opts ...grpc.CallOption) (*CheckAuthResponse, error) <span class="cov0" title="0">{
+        cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+        out := new(CheckAuthResponse)
+        err := c.cc.Invoke(ctx, AntiBruteforceService_CheckAuth_FullMethodName, in, out, cOpts...)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov0" title="0">return out, nil</span>
+}
+
+func (c *antiBruteforceServiceClient) ResetBucket(ctx context.Context, in *ResetBucketRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) <span class="cov0" title="0">{
+        cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+        out := new(emptypb.Empty)
+        err := c.cc.Invoke(ctx, AntiBruteforceService_ResetBucket_FullMethodName, in, out, cOpts...)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov0" title="0">return out, nil</span>
+}
+
+func (c *antiBruteforceServiceClient) AddToBlacklist(ctx context.Context, in *SubnetRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) <span class="cov0" title="0">{
+        cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+        out := new(emptypb.Empty)
+        err := c.cc.Invoke(ctx, AntiBruteforceService_AddToBlacklist_FullMethodName, in, out, cOpts...)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov0" title="0">return out, nil</span>
+}
+
+func (c *antiBruteforceServiceClient) RemoveFromBlacklist(ctx context.Context, in *SubnetRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) <span class="cov0" title="0">{
+        cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+        out := new(emptypb.Empty)
+        err := c.cc.Invoke(ctx, AntiBruteforceService_RemoveFromBlacklist_FullMethodName, in, out, cOpts...)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov0" title="0">return out, nil</span>
+}
+
+func (c *antiBruteforceServiceClient) AddToWhitelist(ctx context.Context, in *SubnetRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) <span class="cov0" title="0">{
+        cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+        out := new(emptypb.Empty)
+        err := c.cc.Invoke(ctx, AntiBruteforceService_AddToWhitelist_FullMethodName, in, out, cOpts...)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov0" title="0">return out, nil</span>
+}
+
+func (c *antiBruteforceServiceClient) RemoveFromWhitelist(ctx context.Context, in *SubnetRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) <span class="cov0" title="0">{
+        cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+        out := new(emptypb.Empty)
+        err := c.cc.Invoke(ctx, AntiBruteforceService_RemoveFromWhitelist_FullMethodName, in, out, cOpts...)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov0" title="0">return out, nil</span>
+}
+
+// AntiBruteforceServiceServer is the server API for AntiBruteforceService service.
+// All implementations must embed UnimplementedAntiBruteforceServiceServer
+// for forward compatibility.
+type AntiBruteforceServiceServer interface {
+        // CheckAuth decides whether an authorization attempt should be allowed.
+        // Returns ok=true  → allow
+        //
+        //        ok=false → deny (rate limit exceeded or IP is blacklisted)
+        //        ok=true  → always allow when IP is whitelisted (short-circuits limits)
+        CheckAuth(context.Context, *CheckAuthRequest) (*CheckAuthResponse, error)
+        // ResetBucket clears the leaky-bucket counters for a given login and IP.
+        // Useful for manual unblocking (typically called from the CLI tool).
+        ResetBucket(context.Context, *ResetBucketRequest) (*emptypb.Empty, error)
+        // AddToBlacklist registers a CIDR subnet whose IPs will be unconditionally denied.
+        AddToBlacklist(context.Context, *SubnetRequest) (*emptypb.Empty, error)
+        // RemoveFromBlacklist deregisters a previously added blacklist subnet.
+        RemoveFromBlacklist(context.Context, *SubnetRequest) (*emptypb.Empty, error)
+        // AddToWhitelist registers a CIDR subnet whose IPs bypass all rate-limit checks.
+        AddToWhitelist(context.Context, *SubnetRequest) (*emptypb.Empty, error)
+        // RemoveFromWhitelist deregisters a previously added whitelist subnet.
+        RemoveFromWhitelist(context.Context, *SubnetRequest) (*emptypb.Empty, error)
+        mustEmbedUnimplementedAntiBruteforceServiceServer()
+}
+
+// UnimplementedAntiBruteforceServiceServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedAntiBruteforceServiceServer struct{}
+
+func (UnimplementedAntiBruteforceServiceServer) CheckAuth(context.Context, *CheckAuthRequest) (*CheckAuthResponse, error) <span class="cov0" title="0">{
+        return nil, status.Error(codes.Unimplemented, "method CheckAuth not implemented")
+}</span>
+func (UnimplementedAntiBruteforceServiceServer) ResetBucket(context.Context, *ResetBucketRequest) (*emptypb.Empty, error) <span class="cov0" title="0">{
+        return nil, status.Error(codes.Unimplemented, "method ResetBucket not implemented")
+}</span>
+func (UnimplementedAntiBruteforceServiceServer) AddToBlacklist(context.Context, *SubnetRequest) (*emptypb.Empty, error) <span class="cov0" title="0">{
+        return nil, status.Error(codes.Unimplemented, "method AddToBlacklist not implemented")
+}</span>
+func (UnimplementedAntiBruteforceServiceServer) RemoveFromBlacklist(context.Context, *SubnetRequest) (*emptypb.Empty, error) <span class="cov0" title="0">{
+        return nil, status.Error(codes.Unimplemented, "method RemoveFromBlacklist not implemented")
+}</span>
+func (UnimplementedAntiBruteforceServiceServer) AddToWhitelist(context.Context, *SubnetRequest) (*emptypb.Empty, error) <span class="cov0" title="0">{
+        return nil, status.Error(codes.Unimplemented, "method AddToWhitelist not implemented")
+}</span>
+func (UnimplementedAntiBruteforceServiceServer) RemoveFromWhitelist(context.Context, *SubnetRequest) (*emptypb.Empty, error) <span class="cov0" title="0">{
+        return nil, status.Error(codes.Unimplemented, "method RemoveFromWhitelist not implemented")
+}</span>
+func (UnimplementedAntiBruteforceServiceServer) mustEmbedUnimplementedAntiBruteforceServiceServer() {<span class="cov0" title="0">}</span>
+func (UnimplementedAntiBruteforceServiceServer) testEmbeddedByValue()                               {<span class="cov0" title="0">}</span>
+
+// UnsafeAntiBruteforceServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to AntiBruteforceServiceServer will
+// result in compilation errors.
+type UnsafeAntiBruteforceServiceServer interface {
+        mustEmbedUnimplementedAntiBruteforceServiceServer()
+}
+
+func RegisterAntiBruteforceServiceServer(s grpc.ServiceRegistrar, srv AntiBruteforceServiceServer) <span class="cov0" title="0">{
+        // If the following call panics, it indicates UnimplementedAntiBruteforceServiceServer was
+        // embedded by pointer and is nil.  This will cause panics if an
+        // unimplemented method is ever invoked, so we test this at initialization
+        // time to prevent it from happening at runtime later due to I/O.
+        if t, ok := srv.(interface{ testEmbeddedByValue() }); ok </span><span class="cov0" title="0">{
+                t.testEmbeddedByValue()
+        }</span>
+        <span class="cov0" title="0">s.RegisterService(&amp;AntiBruteforceService_ServiceDesc, srv)</span>
+}
+
+func _AntiBruteforceService_CheckAuth_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) <span class="cov0" title="0">{
+        in := new(CheckAuthRequest)
+        if err := dec(in); err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov0" title="0">if interceptor == nil </span><span class="cov0" title="0">{
+                return srv.(AntiBruteforceServiceServer).CheckAuth(ctx, in)
+        }</span>
+        <span class="cov0" title="0">info := &amp;grpc.UnaryServerInfo{
+                Server:     srv,
+                FullMethod: AntiBruteforceService_CheckAuth_FullMethodName,
+        }
+        handler := func(ctx context.Context, req interface{}) (interface{}, error) </span><span class="cov0" title="0">{
+                return srv.(AntiBruteforceServiceServer).CheckAuth(ctx, req.(*CheckAuthRequest))
+        }</span>
+        <span class="cov0" title="0">return interceptor(ctx, in, info, handler)</span>
+}
+
+func _AntiBruteforceService_ResetBucket_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) <span class="cov0" title="0">{
+        in := new(ResetBucketRequest)
+        if err := dec(in); err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov0" title="0">if interceptor == nil </span><span class="cov0" title="0">{
+                return srv.(AntiBruteforceServiceServer).ResetBucket(ctx, in)
+        }</span>
+        <span class="cov0" title="0">info := &amp;grpc.UnaryServerInfo{
+                Server:     srv,
+                FullMethod: AntiBruteforceService_ResetBucket_FullMethodName,
+        }
+        handler := func(ctx context.Context, req interface{}) (interface{}, error) </span><span class="cov0" title="0">{
+                return srv.(AntiBruteforceServiceServer).ResetBucket(ctx, req.(*ResetBucketRequest))
+        }</span>
+        <span class="cov0" title="0">return interceptor(ctx, in, info, handler)</span>
+}
+
+func _AntiBruteforceService_AddToBlacklist_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) <span class="cov0" title="0">{
+        in := new(SubnetRequest)
+        if err := dec(in); err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov0" title="0">if interceptor == nil </span><span class="cov0" title="0">{
+                return srv.(AntiBruteforceServiceServer).AddToBlacklist(ctx, in)
+        }</span>
+        <span class="cov0" title="0">info := &amp;grpc.UnaryServerInfo{
+                Server:     srv,
+                FullMethod: AntiBruteforceService_AddToBlacklist_FullMethodName,
+        }
+        handler := func(ctx context.Context, req interface{}) (interface{}, error) </span><span class="cov0" title="0">{
+                return srv.(AntiBruteforceServiceServer).AddToBlacklist(ctx, req.(*SubnetRequest))
+        }</span>
+        <span class="cov0" title="0">return interceptor(ctx, in, info, handler)</span>
+}
+
+func _AntiBruteforceService_RemoveFromBlacklist_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) <span class="cov0" title="0">{
+        in := new(SubnetRequest)
+        if err := dec(in); err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov0" title="0">if interceptor == nil </span><span class="cov0" title="0">{
+                return srv.(AntiBruteforceServiceServer).RemoveFromBlacklist(ctx, in)
+        }</span>
+        <span class="cov0" title="0">info := &amp;grpc.UnaryServerInfo{
+                Server:     srv,
+                FullMethod: AntiBruteforceService_RemoveFromBlacklist_FullMethodName,
+        }
+        handler := func(ctx context.Context, req interface{}) (interface{}, error) </span><span class="cov0" title="0">{
+                return srv.(AntiBruteforceServiceServer).RemoveFromBlacklist(ctx, req.(*SubnetRequest))
+        }</span>
+        <span class="cov0" title="0">return interceptor(ctx, in, info, handler)</span>
+}
+
+func _AntiBruteforceService_AddToWhitelist_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) <span class="cov0" title="0">{
+        in := new(SubnetRequest)
+        if err := dec(in); err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov0" title="0">if interceptor == nil </span><span class="cov0" title="0">{
+                return srv.(AntiBruteforceServiceServer).AddToWhitelist(ctx, in)
+        }</span>
+        <span class="cov0" title="0">info := &amp;grpc.UnaryServerInfo{
+                Server:     srv,
+                FullMethod: AntiBruteforceService_AddToWhitelist_FullMethodName,
+        }
+        handler := func(ctx context.Context, req interface{}) (interface{}, error) </span><span class="cov0" title="0">{
+                return srv.(AntiBruteforceServiceServer).AddToWhitelist(ctx, req.(*SubnetRequest))
+        }</span>
+        <span class="cov0" title="0">return interceptor(ctx, in, info, handler)</span>
+}
+
+func _AntiBruteforceService_RemoveFromWhitelist_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) <span class="cov0" title="0">{
+        in := new(SubnetRequest)
+        if err := dec(in); err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov0" title="0">if interceptor == nil </span><span class="cov0" title="0">{
+                return srv.(AntiBruteforceServiceServer).RemoveFromWhitelist(ctx, in)
+        }</span>
+        <span class="cov0" title="0">info := &amp;grpc.UnaryServerInfo{
+                Server:     srv,
+                FullMethod: AntiBruteforceService_RemoveFromWhitelist_FullMethodName,
+        }
+        handler := func(ctx context.Context, req interface{}) (interface{}, error) </span><span class="cov0" title="0">{
+                return srv.(AntiBruteforceServiceServer).RemoveFromWhitelist(ctx, req.(*SubnetRequest))
+        }</span>
+        <span class="cov0" title="0">return interceptor(ctx, in, info, handler)</span>
+}
+
+// AntiBruteforceService_ServiceDesc is the grpc.ServiceDesc for AntiBruteforceService service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var AntiBruteforceService_ServiceDesc = grpc.ServiceDesc{
+        ServiceName: "antibruteforce.v1.AntiBruteforceService",
+        HandlerType: (*AntiBruteforceServiceServer)(nil),
+        Methods: []grpc.MethodDesc{
+                {
+                        MethodName: "CheckAuth",
+                        Handler:    _AntiBruteforceService_CheckAuth_Handler,
+                },
+                {
+                        MethodName: "ResetBucket",
+                        Handler:    _AntiBruteforceService_ResetBucket_Handler,
+                },
+                {
+                        MethodName: "AddToBlacklist",
+                        Handler:    _AntiBruteforceService_AddToBlacklist_Handler,
+                },
+                {
+                        MethodName: "RemoveFromBlacklist",
+                        Handler:    _AntiBruteforceService_RemoveFromBlacklist_Handler,
+                },
+                {
+                        MethodName: "AddToWhitelist",
+                        Handler:    _AntiBruteforceService_AddToWhitelist_Handler,
+                },
+                {
+                        MethodName: "RemoveFromWhitelist",
+                        Handler:    _AntiBruteforceService_RemoveFromWhitelist_Handler,
+                },
+        },
+        Streams:  []grpc.StreamDesc{},
+        Metadata: "antibruteforce/v1/antibruteforce.proto",
+}
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>

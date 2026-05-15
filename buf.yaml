@@ -1,0 +1,16 @@
+version: v2
+
+modules:
+  - path: api
+
+# deps is top-level, not nested under modules
+deps:
+  - buf.build/googleapis/googleapis
+
+lint:
+  use:
+    - DEFAULT
+
+breaking:
+  use:
+    - FILE
